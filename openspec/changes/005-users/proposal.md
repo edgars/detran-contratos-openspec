@@ -2,21 +2,22 @@
 
 ## Why
 
-O sistema legado mantém Users na tela "Users" sobre a tabela `users` (4 campo(s)). A aplicação
-moderna precisa preservar esse cadastro — listar, criar, editar e excluir — com as regras de
-negócio que o legado aplica, citadas pela chave `RK-…`.
+O sistema legado mantém usuários na tela "Users" sobre a tabela `users` e oferece a troca de
+senha (Login e Alterar Senha). O pacote gerado tratava `passwordold`, `passwordnew` e
+`passwordconfirm` como colunas da lista, o que exporia senhas. Esta versão separa o cadastro de
+usuários da troca da própria senha e segue `001b-security-baseline`.
 
 ## What Changes
 
-- Rotas `/users`, `/users/new`, `/users/[id]/edit` e API `/api/users`.
-- 0 requirement(s) de negócio do legado.
-- 0 lookup(s) para outras entidades.
+- Rotas `/users`, `/users/new`, `/users/[id]/edit`, `/conta/senha` e API `/api/users`.
+- Senha só na criação e na troca de senha; nunca listada nem devolvida pela API.
+- 4 regras de negócio do legado no fluxo de troca de senha, citadas por `RK-…` (validação compartilhada criada em `001-project-foundation`).
 
 ## Capabilities
 
 ### New Capabilities
 
-- `users`: cadastro de Users: lista, formulários, exclusão e regras de negócio
+- `users`: cadastro de usuários e troca da própria senha
 
 ### Modified Capabilities
 
@@ -24,6 +25,10 @@ _none_
 
 ## Impact
 
-- Tabela `users` (migração própria).
-- API `/api/users` e páginas de lista/formulário.
-- Depende da change de fundação.
+- Tabela `users` (migração própria), com `passwordHash` de `001b-security-baseline`.
+- API `/api/users` e páginas de lista, formulário e troca de senha.
+- Depende da fundação e da base de segurança.
+
+## Fora de escopo
+
+- Associação de usuários a grupos (`groups_users`): depende da decisão sobre permissões em `001b-security-baseline/design.md` § Open Questions.

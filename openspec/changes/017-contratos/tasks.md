@@ -2,31 +2,38 @@
 
 ## 1. Modelo de dados
 
-- [ ] 1.1 Migração criando `contratos` com as colunas de `design.md` (tipos e nulidade); entidade/modelo no ORM.
-- [ ] 1.2 FK `tipoContratoId` → `TipoContrato`; teste de integridade.
-- [ ] 1.3 FK `modalidadeId` → `Modalidades`; teste de integridade.
-- [ ] 1.4 FK `situacaoContratualId` → `SituacaoContratual`; teste de integridade.
-- [ ] 1.5 FK `prestadorServicoId` → `PrestadoresServicos`; teste de integridade.
-- [ ] 1.6 FK `situacaoContratual` → `SituacaoContratual`; teste de integridade.
+- [ ] 1.1 Migração criando `contratos` com as colunas de `001-project-foundation/design.md` › Contratos, valores em `Decimal`; entidade no Prisma. Verificação: `prisma migrate dev` aplica sem erro.
+- [ ] 1.2 FKs `tipoContratoId` → `TipoContrato`, `modalidadeId` → `Modalidades`, `departamentoId` → `Departamentos`, `prestadorServicoId` → `PrestadoresServicos`, `situacaoContratualId` → `SituacaoContratual`, `parentId` → `Contratos`; teste de integridade de cada FK.
 
 ## 2. API
 
-- [ ] 2.1 `GET /api/contratos` paginado com buscapor `busca`, `tipoContratoId`, `modalidadeId`, `campo`, `ordenar`; teste de paginação.
-- [ ] 2.2 `POST /api/contratos` validando o corpo (obrigatórios: `tipoContratoId`); teste rejeitando corpo inválido com `400`.
+- [ ] 2.1 `GET /api/contratos` paginado com os filtros de `design.md` § Filtros da lista; testes de paginação, de `q` e de `vencendoEm`.
+- [ ] 2.2 `POST /api/contratos` com schema `zod` `.strict()` (helper de `001b-security-baseline`); teste rejeitando corpo inválido com `400`.
 - [ ] 2.3 `GET /api/contratos/:id`, `PUT /api/contratos/:id`, `DELETE /api/contratos/:id`; testes de cada verbo.
+- [ ] 2.4 `POST /api/contratos/:id/aditivos` criando contrato filho; teste do cenário *Criar aditivo*.
 
 ## 3. Telas
 
-- [ ] 3.1 Página `/contratos`: tabela com as colunas de lista (`busca`, `tipoContratoId`, `modalidadeId`, `campo`, `ordenar`), busca e paginação, botão *Novo*.
-- [ ] 3.2 Formulário `/contratos/new` com os campos na ordem de `design.md`; obrigatórios com erro inline.
-- [ ] 3.3 Formulário `/contratos/[id]/edit` pré-preenchido, com salvar e excluir (confirmação).
-- [ ] 3.4 Select de `tipoContratoId` carregado de `/api/tipo_contratos` exibindo `nome`.
-- [ ] 3.5 Select de `modalidadeId` carregado de `/api/modalidades` exibindo `nome`.
-- [ ] 3.6 Select de `situacaoContratualId` carregado de `/api/situacao_contratual` exibindo `id`.
-- [ ] 3.7 Select de `prestadorServicoId` carregado de `/api/prestadores_servicos` exibindo `id`.
-- [ ] 3.8 Select de `situacaoContratual` carregado de `/api/situacao_contratual` exibindo `id`.
+- [ ] 3.1 Página `/contratos`: tabela com as colunas de lista de `design.md`, filtros, ordenação, paginação e botão *Novo*; teste do cenário *Abrir a lista*.
+- [ ] 3.2 Formulário `/contratos/new` com os campos na ordem de `design.md`, obrigatórios com erro inline; teste do cenário *Salvar um contrato válido*.
+- [ ] 3.3 Formulário `/contratos/[id]/edit` pré-preenchido, com salvar e excluir (confirmação); teste dos cenários de edição e exclusão.
+- [ ] 3.4 Página `/contratos/[id]` com os aditivos do contrato e o botão *Novo aditivo*; teste manual abrindo um contrato com aditivo.
+- [ ] 3.5 Selects de `tipoContratoId`, `modalidadeId`, `departamentoId`, `prestadorServicoId` e `situacaoContratualId`, e busca (`command`) de `pessoaFisicaId` e `suplenteId`; um teste por lookup.
 
-## 4. Verificação
+## 4. Regras de negócio
 
-- [ ] 4.1 Um teste por `#### Scenario:` de `specs/contratos/spec.md`, todos verdes.
-- [ ] 4.2 `openspec validate 017-contratos --strict` passa; com o MCP da RNC conectado, `getRule` conferido para cada `RK-…` acima.
+- [ ] 4.1 Enforce `RK-79134600b4be` — Informe o tipo de contrato; no schema `zod` de contratos, comentário `// RK-79134600b4be`; teste *Salvar sem tipo*.
+- [ ] 4.2 Enforce `RK-776d8b62d6df` — Informe o número do processo; no schema de contratos, comentário `// RK-776d8b62d6df`; teste do cenário.
+- [ ] 4.3 Enforce `RK-04fd1cbfc346` — Informe o número do contrato; no schema de contratos, comentário `// RK-04fd1cbfc346`; teste do cenário.
+- [ ] 4.4 Enforce `RK-6b2806cfff8d` — Informe a data de início; no schema de contratos, comentário `// RK-6b2806cfff8d`; teste do cenário.
+- [ ] 4.5 Enforce `RK-9d6599f5897d` — Informe a data de vencimento; no schema de contratos, comentário `// RK-9d6599f5897d`; teste do cenário.
+- [ ] 4.6 Enforce `RK-a0660a4fb262` — Informe o departamento(unidade gestora); no schema de contratos, comentário `// RK-a0660a4fb262`; teste do cenário.
+- [ ] 4.7 Enforce `RK-37f294a3dc8e` — Informe o fornecedor; no schema de contratos, comentário `// RK-37f294a3dc8e`; teste do cenário.
+- [ ] 4.8 Enforce `RK-5c46553fce3d` e `RK-260f6b933f77` — conversão de `valorTotal` e `valorMensal` para `Decimal` no handler de gravação, comentários `// RK-5c46553fce3d` e `// RK-260f6b933f77`; teste *Valor em formato brasileiro*.
+- [ ] 4.9 Enforce `RK-c3fbde6dbf4a` — `valorInicial = valorTotal` sem `parentId`, no serviço de gravação, comentário `// RK-c3fbde6dbf4a`; testes *Contrato original* e *Aditivo*.
+- [ ] 4.10 Enforce `RK-295d296eb4f7` e `RK-b6f82ba63c1f` — anexos de publicação e fiscal via `savePdf()`, comentários `// RK-295d296eb4f7` e `// RK-b6f82ba63c1f`; teste *Anexo que não é PDF*.
+
+## 5. Verificação
+
+- [ ] 5.1 Um teste por `#### Scenario:` de `specs/contratos/spec.md`, todos verdes.
+- [ ] 5.2 `openspec validate 017-contratos --strict` passa; com o MCP da RNC conectado, `getRule` conferido para cada `RK-…` acima.
