@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-12
+goal: "Gestão de ContratoStatus"
+affected_areas:
+  - contrato-status

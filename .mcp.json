@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rnc": {
+      "type": "sse",
+      "url": "${RNC_MCP_URL}/sse",
+      "headers": {
+        "Authorization": "Bearer ${RNC_MCP_TOKEN}"
+      }
+    }
+  }
+}

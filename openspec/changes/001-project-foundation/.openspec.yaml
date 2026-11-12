@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-11-12
+goal: "Fundação do projeto — TDOC - Processos Detran"
+affected_areas:
+  - app-shell
+  - locale-and-formats
+  - cross-cutting-rules
