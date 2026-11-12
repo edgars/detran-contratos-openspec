@@ -25,6 +25,7 @@ entidade repete só a sua tabela.
 - **Locale e formatos** — locale pt-BR, datas `dd/MM/yyyy`, moeda `R$` (Configurações da Aplicação na RNC). Um formatador compartilhado por toda lista e formulário; nunca formatar inline.
 - **Um módulo por entidade gerenciada** — rota, API, validação e páginas próprias; espelha a estrutura tela-por-entidade do legado.
 - **Tabelas de referência são lookups, não telas** — API read-only; o FK guarda o id do registro relacionado. Reproduz o comportamento do legado sem inventar CRUD.
+- **Valores monetários em `Decimal`** — `pagamentos.valor`, `pagamentos.valorGlosa`, `contratos.valorInicial`, `contratos.valorMensal` e `contratos.valorTotal` usam `Decimal` no Prisma, nunca `Float` (o legado usava FLOAT, inadequado para dinheiro).
 - **Configuração por ambiente** — tudo em `.env` com `.env.example` versionado; segredos nunca no código.
 
 ## Modelo de dados
@@ -78,16 +79,13 @@ entidade repete só a sua tabela.
 |---|---|---|
 | id | Int (PK, auto) | não |
 | username | String | não |
-| password | String | não |
+| passwordHash | String | não |
 | created | DateTime? | sim |
 | modified | DateTime? | sim |
 | pessoaId | Int | não |
 | superuser | Int? | sim |
 | inativo | Int? | sim |
 | ultimoLogin | DateTime? | sim |
-| passwordold | String? | sim |
-| passwordnew | String? | sim |
-| passwordconfirm | String? | sim |
 
 **Relações:**
 - tem muitos `Historicos`
@@ -100,13 +98,13 @@ entidade repete só a sua tabela.
 | competencia | DateTime | não |
 | numeroProcesso | String | não |
 | contratoId | Int | não |
-| valor | Float? | sim |
+| valor | Decimal? | sim |
 | empenho | String? | sim |
 | notaFiscal | String? | sim |
 | notaLiquidacao | String? | sim |
 | ordemBancaria | String? | sim |
 | glosa | String? | sim |
-| valorGlosa | Float? | sim |
+| valorGlosa | Decimal? | sim |
 | mes | String? | sim |
 | ano | String? | sim |
 
@@ -226,9 +224,9 @@ entidade repete só a sua tabela.
 | dataInclusao | DateTime? | sim |
 | dataInicio | DateTime? | sim |
 | dataTermino | DateTime? | sim |
-| valorInicial | Float? | sim |
-| valorMensal | Float? | sim |
-| valorTotal | Float? | sim |
+| valorInicial | Decimal? | sim |
+| valorMensal | Decimal? | sim |
+| valorTotal | Decimal? | sim |
 | departamentoId | Int? | sim |
 | pessoaFisicaId | String? | sim |
 | suplenteId | String? | sim |
@@ -243,26 +241,18 @@ entidade repete só a sua tabela.
 | numeroModalidade | String? | sim |
 | naPresidencia | Int? | sim |
 | prestacaoRealizada | String? | sim |
-| buscaDepto | String? | sim |
-| buscaGestor | String? | sim |
-| buscaGestorSuplente | String? | sim |
 | numeroFiscais | String? | sim |
-| vencendo | String? | sim |
-| busca | String? | sim |
-| campo | String? | sim |
-| ordenar | String? | sim |
-| situacaoContratual | Int? | sim |
-| deRazaoSocial | String? | sim |
-| deDepartamento | String? | sim |
-| deNome | String? | sim |
 
 **Relações:**
 - pertence a `TipoContrato` via `tipoContratoId`
 - pertence a `Modalidades` via `modalidadeId`
 - pertence a `SituacaoContratual` via `situacaoContratualId`
 - pertence a `PrestadoresServicos` via `prestadorServicoId`
-- pertence a `SituacaoContratual` via `situacaoContratual`
+- pertence a `Departamentos` via `departamentoId`
+- pertence a `Contratos` via `parentId` (aditivo do contrato original)
 - tem muitos `Historicos`
+
+_Ajuste:_ `busca`, `campo`, `ordenar`, `buscaDepto`, `buscaGestor`, `buscaGestorSuplente`, `vencendo`, `deRazaoSocial`, `deDepartamento` e `deNome` são filtros da tela de pesquisa do legado, não colunas; `situacaoContratual` duplicava `situacaoContratualId`. Ver `017-contratos/design.md`.
 
 ### Diretorias (`diretorias`)  _— tabela de referência_
 
@@ -456,10 +446,4 @@ Do perfil de geração da RNC (locale pt-BR), resolvidas pelo nome do campo. Só
 
 ## Open Questions
 
-- **Autenticação** — o legado valida usuário/senha e o canvas está com SSO desligado. Decidir antes de construir: ligar SSO no canvas da RNC ou especificar login local. Evidência:
-  - `RK-9187b7b464f8` Senha atual não confere!
-  - `RK-dcfcd941a4d6` A nova senha não confere!
-  - `RK-3e9d7e57ae65` password is required
-  - `RK-304882e7bdc8` Senha atual não confere!
-  - `RK-96cbe7d6e198` A nova senha não confere!
-  - `RK-38821207df73` password is required
+- **Autenticação** — resolvida: login local com senha em hash, especificado na change `001b-security-baseline` (capability `security`). SSO continua desligado. As regras `RK-9187b7b464f8`, `RK-dcfcd941a4d6`, `RK-304882e7bdc8` e `RK-96cbe7d6e198` valem no fluxo de troca de senha de `005-users`.
