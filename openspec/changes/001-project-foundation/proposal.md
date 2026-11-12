@@ -39,6 +39,8 @@ _none_
 Regras extraídas do legado cujos campos e tabelas não existem em nenhuma entidade deste
 build. Ficam registradas para decisão de produto; nenhuma change as implementa.
 
+As regras de `contratos` que estavam nesta lista (obrigatórios do cadastro, valores derivados e anexos de publicação e fiscal) foram movidas para `017-contratos`.
+
 - `RK-0a63dddb4ed6` diretoria_id is required
 - `RK-ab7a3a8ef0b4` Erro ao associar. Grupo não foi informado!
 - `RK-69182a6c3643` Erro ao associar. Usuário não foi informado!
@@ -68,17 +70,6 @@ build. Ficam registradas para decisão de produto; nenhuma change as implementa.
 - `RK-2e913a11353e` data_registro is required
 - `RK-173858674ac1` contrato_id is required
 - `RK-400c6f977aa8` user_id is required
-- `RK-776d8b62d6df` Informe o número do processo
-- `RK-04fd1cbfc346` Informe o número do contrato
-- `RK-6b2806cfff8d` Informe a data de início
-- `RK-9d6599f5897d` Informe a data de vencimento
-- `RK-a0660a4fb262` Informe o departamento(unidade gestora)
-- `RK-37f294a3dc8e` Informe o fornecedor
-- `RK-295d296eb4f7` Erro ao incluir O arquivo anexo deve ser do tipo PDF!
-- `RK-b6f82ba63c1f` Erro ao incluir O arquivo anexo deve ser do tipo PDF!
-- `RK-5c46553fce3d` Valor Total is derived before saving
-- `RK-260f6b933f77` Valor Mensal is derived before saving
-- `RK-c3fbde6dbf4a` Valor Inicial is derived before saving when empty($this->data['Contrato']['parent_id'])
 - `RK-e43e0c864331` contrato_id is required
 - `RK-08a4781c828d` data_publicacao is required
 - `RK-a2970c62326d` diretoria_id is required

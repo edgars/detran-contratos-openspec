@@ -22,7 +22,6 @@ genéricos mapeados para shadcn/ui no design da fundação.
 
 ## Decisions
 
-- **Onde cada regra vale** — `RK-79134600b4be`: a definir — ler a regra antes de escolher a camada
 - **Validação dupla** — campos obrigatórios validados no formulário e na API; a API é a última palavra.
 
 ## Risks / Trade-offs

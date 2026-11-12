@@ -9,7 +9,7 @@ negócio que o legado aplica, citadas pela chave `RK-…`.
 ## What Changes
 
 - Rotas `/tipo_contratos`, `/tipo_contratos/new`, `/tipo_contratos/[id]/edit` e API `/api/tipo_contratos`.
-- 1 requirement(s) de negócio do legado.
+- 0 requirement(s) de negócio do legado (`RK-79134600b4be`, "Informe o tipo de contrato", vale no cadastro de contratos e foi movida para `017-contratos`).
 - 0 lookup(s) para outras entidades.
 
 ## Capabilities

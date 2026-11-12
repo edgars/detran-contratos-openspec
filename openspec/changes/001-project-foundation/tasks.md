@@ -36,8 +36,8 @@
 - [ ] 4.10 Enforce `RK-82de63b47e64` — Por favor,Preencher o campo NOME !; comentário `// RK-82de63b47e64` no ponto do código onde a regra vale.
 - [ ] 4.11 Enforce `RK-2509b78bd0e0` — gerenciamento is required; comentário `// RK-2509b78bd0e0` no ponto do código onde a regra vale.
 - [ ] 4.12 Enforce `RK-f0ce91a53de9` — Descricao is derived before saving; comentário `// RK-f0ce91a53de9` no ponto do código onde a regra vale.
-- [ ] 4.13 Enforce `RK-9187b7b464f8` — Senha atual não confere!; comentário `// RK-9187b7b464f8` no ponto do código onde a regra vale.
-- [ ] 4.14 Enforce `RK-dcfcd941a4d6` — A nova senha não confere!; comentário `// RK-dcfcd941a4d6` no ponto do código onde a regra vale.
+- [ ] 4.13 Enforce `RK-9187b7b464f8` — Senha atual não confere!; nesta change, criar a validação compartilhada de troca de senha com teste unitário; o ponto de uso é a tela de troca de senha de `005-users`, com comentário `// RK-9187b7b464f8`.
+- [ ] 4.14 Enforce `RK-dcfcd941a4d6` — A nova senha não confere!; nesta change, criar a validação compartilhada de troca de senha com teste unitário; o ponto de uso é a tela de troca de senha de `005-users`, com comentário `// RK-dcfcd941a4d6`.
 - [ ] 4.15 Enforce `RK-d76edbb42dbe` — username is required; comentário `// RK-d76edbb42dbe` no ponto do código onde a regra vale.
 - [ ] 4.16 Enforce `RK-3e9d7e57ae65` — password is required; comentário `// RK-3e9d7e57ae65` no ponto do código onde a regra vale.
 - [ ] 4.17 Enforce `RK-774f44ed6df9` — competencia is required; comentário `// RK-774f44ed6df9` no ponto do código onde a regra vale.
@@ -68,8 +68,8 @@
 - [ ] 4.42 Enforce `RK-0e70b6c81ee9` — anexo is required; comentário `// RK-0e70b6c81ee9` no ponto do código onde a regra vale.
 - [ ] 4.43 Enforce `RK-4564e4e322b6` — gerenciamento is required; comentário `// RK-4564e4e322b6` no ponto do código onde a regra vale.
 - [ ] 4.44 Enforce `RK-528cec3828cf` — DeRazaoSocial is required; comentário `// RK-528cec3828cf` no ponto do código onde a regra vale.
-- [ ] 4.45 Enforce `RK-304882e7bdc8` — Senha atual não confere!; comentário `// RK-304882e7bdc8` no ponto do código onde a regra vale.
-- [ ] 4.46 Enforce `RK-96cbe7d6e198` — A nova senha não confere!; comentário `// RK-96cbe7d6e198` no ponto do código onde a regra vale.
+- [ ] 4.45 Enforce `RK-304882e7bdc8` — Senha atual não confere!; nesta change, criar a validação compartilhada de troca de senha com teste unitário; o ponto de uso é a tela de troca de senha de `005-users`, com comentário `// RK-304882e7bdc8`.
+- [ ] 4.46 Enforce `RK-96cbe7d6e198` — A nova senha não confere!; nesta change, criar a validação compartilhada de troca de senha com teste unitário; o ponto de uso é a tela de troca de senha de `005-users`, com comentário `// RK-96cbe7d6e198`.
 - [ ] 4.47 Enforce `RK-39dd9b2d1419` — username is required; comentário `// RK-39dd9b2d1419` no ponto do código onde a regra vale.
 - [ ] 4.48 Enforce `RK-38821207df73` — password is required; comentário `// RK-38821207df73` no ponto do código onde a regra vale.
 - [ ] 4.49 Enforce `RK-b33fcd808e28` — IdPessoaFisica is required; comentário `// RK-b33fcd808e28` no ponto do código onde a regra vale.
