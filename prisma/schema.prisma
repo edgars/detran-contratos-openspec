@@ -1,0 +1,134 @@
+// Modelo de dados — openspec/changes/001-project-foundation/design.md § Modelo de dados.
+// Esta change cria só as tabelas de referência; cada change de entidade adiciona a sua tabela
+// numa migração própria. Valores monetários serão Decimal (diretiva do autor em openspec/config.yaml).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model Diretoria {
+  id          Int    @id @default(autoincrement())
+  deDiretoria String
+  codigo      String
+
+  @@map("diretorias")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model PessoaFisica {
+  id                     Int       @id @default(autoincrement())
+  idPessoaFisica         Int
+  deNome                 String?
+  deEndereco             String?
+  deBairro               String?
+  deTelefone             String?
+  deNomePai              String?
+  deNomeMae              String?
+  deNaturalidade         String?
+  deUrlFoto              String?
+  prestadorServico       String?
+  cep                    String?
+  pseudonimo             String?
+  nuExtraQuadro          String?
+  nuRegistro             String?
+  nuMatricula            String?
+  identidadeFuncional    String?
+  vinculo                Int?
+  flTermoImpresso        String?
+  flFuncionarioPublico   String?
+  flConformidadeTermo    String?
+  flEmitirCracha         String?
+  flAprovado             String?
+  flAposentado           Int?
+  dtNascimento           DateTime
+  dtInclusaoTermo        DateTime?
+  dtTermoRecebido        DateTime?
+  dtTermoPreAprovado     DateTime?
+  dtCracha               DateTime?
+  dtCorregedoria         DateTime?
+  dtInformatica          DateTime?
+  dtExcluido             DateTime?
+  dtUltimaAlteracaoTermo DateTime?
+  foto                   String?
+  municipioId            Int?
+  cargoId                Int?
+  tipoSanguineoId        Int?
+  departamentoId         Int?
+  lotacaoId              Int?
+  lotacaoOrigemId        Int?
+  ufId                   String?
+  orgaoExpedidorId       Int?
+  origemExternaId        Int?
+  nacionalidadeId        Int?
+  guiaRemessaId          Int?
+  guiaRemessaCrachaId    Int?
+  usuarioCorregedoriaId  Int?
+  usuarioDpId            Int?
+  flAlteracao            Int?
+  deObservacao           String?
+  deSimbolo              String?
+  dtPublicDoerj          DateTime?
+  dtValidade             DateTime?
+  dtNomeacao             DateTime?
+  dtPosse                DateTime?
+  dtExercicio            DateTime?
+  flPublicadoDoerj       String?
+  dtPublicDoerjN         DateTime?
+  lotacaoCgpId           Int?
+
+  @@map("pessoas_fisicas")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model Pessoa {
+  id   Int     @id @default(autoincrement())
+  cpf  String?
+  cnpj String?
+
+  @@map("pessoas")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model PrestadorServico {
+  id            Int    @id @default(autoincrement())
+  deRazaoSocial String
+
+  @@map("prestadores_servicos")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model GroupUser {
+  id      Int  @id @default(autoincrement())
+  groupId Int
+  userId  Int
+  acoId   Int?
+
+  @@map("groups_users")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model PagamentoArquivo {
+  id          Int    @id @default(autoincrement())
+  arquivo     String
+  pagamentoId Int
+
+  @@map("pagamento_arquivos")
+}
+
+/// Tabela de referência — somente leitura (001-project-foundation, app-shell).
+model Group {
+  id        Int       @id @default(autoincrement())
+  name      String
+  created   DateTime?
+  modified  DateTime?
+  acoId     Int?
+  descricao String?
+
+  @@map("groups")
+}
