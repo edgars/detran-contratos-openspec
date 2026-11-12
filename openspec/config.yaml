@@ -15,6 +15,14 @@ context: |
   NEEDS REVIEW marks a rule that is ambiguous in the legacy source: implement the most probable reading and leave a TODO(review) comment with its RK key.
   Reference tables get a read-only list API and dropdowns, never create/edit/delete screens.
   The RNC MCP server (env RNC_MCP_URL, RNC_MCP_TOKEN) is optional: getRule verifies an RK, getSourceFile reads the legacy code, searchKnowledge answers what the docs leave unclear.
+  Author directives (follow VERBATIM):
+  - Build order: 001-project-foundation, 001b-security-baseline, then 002 to 018 in numeric order. 001b-security-baseline is mandatory before any entity change.
+  - Every page and every /api route requires a logged-in session, except /login and /api/auth/*. Never read a session id from the URL, body or a custom header.
+  - Store passwords only as an argon2id or bcrypt hash. Never list, return or log password, passwordHash, passwordold, passwordnew or passwordconfirm.
+  - Money columns (valor, valorGlosa, valorInicial, valorMensal, valorTotal) are Prisma Decimal, never Float.
+  - Every write validates the body with a strict zod schema and saves only declared fields.
+  - Uploads go through savePdf() from 001b-security-baseline: PDF signature check, size limit, stored outside public/, served only to a valid session.
+  - Legacy search-screen fields (busca, campo, ordenar, buscaDepto, buscaGestor, buscaGestorSuplente, vencendo, deRazaoSocial, deDepartamento, deNome) are list filters, never database columns.
 
 rules:
   proposal:

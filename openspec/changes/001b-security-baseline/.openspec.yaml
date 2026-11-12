@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-12
+goal: "Base de segurança — login, sessão, gravação por lista de campos, uploads e valores monetários"
+affected_areas:
+  - security
