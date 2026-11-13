@@ -16,7 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <ThemeProvider>
           <TooltipProvider>
             {children}
-            <Toaster richColors />
+            <Toaster richColors position="top-right" />
           </TooltipProvider>
         </ThemeProvider>
       </body>

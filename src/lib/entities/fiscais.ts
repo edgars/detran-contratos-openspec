@@ -9,7 +9,7 @@ export const fiscais = {
   columns: [
     // `contrato` é montado pela API (Fiscal não tem relação Prisma com Contrato).
     { key: "contrato", label: "Contrato", path: "contrato.numeroContrato" },
-    { key: "pessoaFisicaCpf", label: "Pessoa Física CPF" },
+    { key: "pessoaFisicaCpf", label: "CPF" },
     { key: "suplente", label: "Suplente", format: "boolean" },
     { key: "presidente", label: "Presidente", format: "boolean" },
   ] satisfies ColumnDef[],
@@ -20,9 +20,9 @@ export const fiscais = {
   filters: [{ name: "busca", label: "Busca por CPF", kind: "number" }] satisfies ListFilter[],
   fields: [
     // contratoId é NOT NULL no modelo e não está no formulário da spec (design.md §Decisions).
-    { name: "contratoId", label: "Contrato", kind: "lookup", required: true, lookup: { api: "/api/contratos", labelField: "numeroContrato" } },
-    { name: "pessoaFisicaCpf", label: "Pessoa Física CPF", kind: "masked", mask: MASKS.cpf, required: true },
-    { name: "suplente", label: "Suplente", kind: "toggle", required: true },
-    { name: "presidente", label: "Presidente", kind: "toggle", required: true },
+    { name: "contratoId", label: "Contrato", kind: "lookup", required: true, lookup: { api: "/api/contratos", labelField: "numeroContrato" }, span: "full" },
+    { name: "pessoaFisicaCpf", label: "CPF do fiscal", kind: "masked", mask: MASKS.cpf, required: true, span: "half" },
+    { name: "suplente", label: "Suplente", kind: "toggle", required: true, span: "half" },
+    { name: "presidente", label: "Presidente", kind: "toggle", required: true, span: "half" },
   ] satisfies FieldDef[],
 };

@@ -2,62 +2,100 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 
 export function LoginForm() {
   const router = useRouter();
   const next = useSearchParams().get("next");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
     const form = new FormData(event.currentTarget);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
-    });
-    setPending(false);
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
+      });
+    } catch {
+      setPending(false);
+      setError("Sem conexão com o servidor. Verifique a rede e tente de novo.");
+      return;
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      setPending(false);
       setError(body.error ?? Object.values(body.errors ?? {})[0] ?? "Não foi possível entrar");
       return;
     }
-    // Só redireciona para caminhos internos.
+    // Só redireciona para caminhos internos. O botão segue em "Entrando…" até a troca de página.
     router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
     router.refresh();
   }
 
+  const invalid = error ? true : undefined;
+  const toggleLabel = showPassword ? "Ocultar senha" : "Mostrar senha";
+
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>DETRAN-RJ · Contratos</CardTitle>
-        <CardDescription>Entre com seu usuário e senha.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="username">Usuário</FieldLabel>
-              <Input id="username" name="username" autoComplete="username" required />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="password">Senha</FieldLabel>
-              <Input id="password" name="password" type="password" autoComplete="current-password" required />
-            </Field>
-            {error && <FieldError>{error}</FieldError>}
-            <Button type="submit" disabled={pending}>
-              {pending ? "Entrando…" : "Entrar"}
-            </Button>
-          </FieldGroup>
-        </form>
-      </CardContent>
-    </Card>
+    <form onSubmit={onSubmit}>
+      <FieldGroup className="gap-5">
+        <Field data-invalid={invalid}>
+          <FieldLabel htmlFor="username">Usuário</FieldLabel>
+          <Input
+            id="username"
+            name="username"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            required
+            aria-invalid={invalid}
+            aria-describedby={error ? "login-erro" : undefined}
+            className="h-10"
+          />
+        </Field>
+        <Field data-invalid={invalid}>
+          <FieldLabel htmlFor="password">Senha</FieldLabel>
+          <InputGroup className="h-10">
+            <InputGroupInput
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              aria-invalid={invalid}
+              aria-describedby={error ? "login-erro" : undefined}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-sm"
+                aria-label={toggleLabel}
+                aria-pressed={showPassword}
+                aria-controls="password"
+                title={toggleLabel}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                {showPassword ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+        </Field>
+        {error && <FieldError id="login-erro">{error}</FieldError>}
+        <Button type="submit" size="lg" className="h-10 w-full" disabled={pending} aria-busy={pending || undefined}>
+          {pending && <Loader2Icon aria-hidden className="animate-spin motion-reduce:animate-none" />}
+          {pending ? "Entrando…" : "Entrar"}
+        </Button>
+      </FieldGroup>
+    </form>
   );
 }

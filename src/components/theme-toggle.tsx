@@ -13,8 +13,15 @@ export function ThemeToggle() {
   const dark = mounted && resolvedTheme === "dark";
   const label = dark ? "Usar tema claro" : "Usar tema escuro";
   return (
-    <Button variant="ghost" size="icon" aria-label={label} title={label} onClick={() => setTheme(dark ? "light" : "dark")}>
-      {dark ? <SunIcon /> : <MoonIcon />}
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      title={label}
+      className="text-muted-foreground hover:text-foreground"
+      onClick={() => setTheme(dark ? "light" : "dark")}
+    >
+      {dark ? <SunIcon aria-hidden /> : <MoonIcon aria-hidden />}
     </Button>
   );
 }
