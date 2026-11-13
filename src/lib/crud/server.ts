@@ -71,6 +71,9 @@ function handleError(error: unknown) {
   if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2003") {
     return NextResponse.json({ error: "Registro em uso por outro cadastro" }, { status: 409 });
   }
+  if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2002") {
+    return NextResponse.json({ error: "Já existe um registro com esse valor" }, { status: 409 });
+  }
   throw error;
 }
 

@@ -27,8 +27,11 @@ export async function createSession(userId: number): Promise<string> {
   await prisma.session.create({ data: { id: await sha256(token), userId, expiresAt } });
   store.set(SESSION_COOKIE, await signToken(token), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false",
+    // Padrão "lax". "none" só para abrir o app dentro de um iframe (ex.: prévia), sempre com Secure.
+    sameSite: process.env.COOKIE_SAMESITE === "none" ? "none" : "lax",
+    secure:
+      process.env.COOKIE_SAMESITE === "none" ||
+      (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"),
     path: "/",
     expires: expiresAt,
   });

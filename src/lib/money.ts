@@ -9,6 +9,8 @@ export function toDecimal(input: unknown): Prisma.Decimal | null {
   if (input === null || input === undefined || input === "") return null;
   if (input instanceof Prisma.Decimal) return input;
   const text = String(input).trim();
-  const decimal = /^-?\d+(\.\d+)?$/.test(text) ? text : parseCurrency(text);
+  // "1.234" é milhar pt-BR (1234), não 1,234; ponto decimal só sem agrupamento de milhar.
+  const isThousands = /^-?\d{1,3}(\.\d{3})+$/.test(text);
+  const decimal = !isThousands && /^-?\d+(\.\d+)?$/.test(text) ? text : parseCurrency(text);
   return decimal === null ? null : new Prisma.Decimal(decimal);
 }

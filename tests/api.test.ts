@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("next/headers", () => import("./helpers/next-headers-mock"));
+import { loginAs, logout } from "./helpers/auth";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { parsePagination, validationError } from "@/lib/api/http";
@@ -44,6 +46,16 @@ afterAll(async () => {
 });
 
 describe("dados de referência somente leitura", () => {
+  beforeEach(async () => {
+    await loginAs();
+  });
+
+  it("sem sessão responde 401 (001b-security-baseline)", async () => {
+    logout();
+    expect((await get("diretorias")).status).toBe(401);
+    await loginAs();
+  });
+
   it("expõe uma rota por tabela de referência", () => {
     expect(Object.keys(routes).sort()).toEqual([...REFERENCE_TABLES].sort());
   });
@@ -64,14 +76,17 @@ describe("dados de referência somente leitura", () => {
   });
 
   it("pagina com page e size", async () => {
+    // Outros arquivos de teste também criam diretorias no mesmo banco: compare com o banco.
+    const total = await prisma.diretoria.count();
+    const eleventh = await prisma.diretoria.findMany({ orderBy: { id: "asc" }, skip: 10, take: 1 });
     const body = await (await get("diretorias", "?page=2&size=10")).json();
-    expect(body).toMatchObject({ page: 2, size: 10, total: 26 });
+    expect(body).toMatchObject({ page: 2, size: 10, total });
     expect(body.items).toHaveLength(10);
-    expect(body.items[0].deDiretoria).toBe("Diretoria 11");
+    expect(body.items[0].id).toBe(eleventh[0].id);
   });
 
   it("busca com q", async () => {
-    const body = await (await get("diretorias", "?q=Contratos")).json();
+    const body = await (await get("diretorias", "?q=Diretoria%20de%20Contratos")).json();
     expect(body.total).toBe(1);
     expect(body.items[0].codigo).toBe("DCT");
   });

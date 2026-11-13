@@ -48,6 +48,7 @@ export function EntityList({
   filters = [],
   searchPlaceholder = "Buscar",
   canCreate = true,
+  rowHref,
 }: {
   title: string;
   api: string;
@@ -56,6 +57,8 @@ export function EntityList({
   filters?: ListFilter[];
   searchPlaceholder?: string;
   canCreate?: boolean;
+  /** Destino do link da 1ª coluna (padrão: `${basePath}/<id>/edit`). Use `{id}` como marcador. */
+  rowHref?: string;
 }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -122,7 +125,7 @@ export function EntityList({
                 {columns.map((c, i) => (
                   <TableCell key={c.key}>
                     {i === 0 ? (
-                      <Link className="font-medium underline-offset-4 hover:underline" href={`${basePath}/${row.id}/edit`}>
+                      <Link className="font-medium underline-offset-4 hover:underline" href={rowHref ? rowHref.replace("{id}", String(row.id)) : `${basePath}/${row.id}/edit`}>
                         {formatCell(row, c)}
                       </Link>
                     ) : (
