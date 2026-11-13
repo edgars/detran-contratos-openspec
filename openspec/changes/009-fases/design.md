@@ -22,6 +22,8 @@ genéricos mapeados para shadcn/ui no design da fundação.
 
 ## Decisions
 
+- **`periodo` como texto** — o legado usava um select, mas as opções não foram rastreadas; o campo é texto obrigatório até as opções serem confirmadas.
+
 - **Validação dupla** — campos obrigatórios validados no formulário e na API; a API é a última palavra.
 
 ## Risks / Trade-offs

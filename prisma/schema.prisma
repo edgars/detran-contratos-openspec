@@ -13,9 +13,10 @@ datasource db {
 
 /// Tabela de referência — somente leitura (001-project-foundation, app-shell).
 model Diretoria {
-  id          Int    @id @default(autoincrement())
-  deDiretoria String
-  codigo      String
+  id            Int            @id @default(autoincrement())
+  deDiretoria   String
+  codigo        String
+  departamentos Departamento[]
 
   @@map("diretorias")
 }
@@ -96,8 +97,9 @@ model Pessoa {
 
 /// Tabela de referência — somente leitura (001-project-foundation, app-shell).
 model PrestadorServico {
-  id            Int    @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   deRazaoSocial String
+  contratos     Contrato[]
 
   @@map("prestadores_servicos")
 }
@@ -131,4 +133,225 @@ model Group {
   descricao String?
 
   @@map("groups")
+}
+
+/// Usuários (tabela de 005-users; criada em 001b-security-baseline por causa do passwordHash).
+model User {
+  id           Int         @id @default(autoincrement())
+  username     String      @unique
+  passwordHash String
+  created      DateTime?   @default(now())
+  modified     DateTime?   @updatedAt
+  /// Obrigatório no legado; opcional aqui até a relação com `pessoas` ser confirmada.
+  pessoaId     Int?
+  superuser    Int?
+  inativo      Int?
+  ultimoLogin  DateTime?
+  sessions     Session[]
+  historicos   Historico[] @relation("HistoricoUsuario")
+
+  @@map("users")
+}
+
+/// Sessões emitidas pelo servidor (001b-security-baseline). `id` guarda o hash do token.
+model Session {
+  id        String   @id
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Departamento {
+  id             Int        @id @default(autoincrement())
+  deDepartamento String
+  codigo         String?
+  deLogradouro   String?
+  deComplemento  String?
+  deBairro       String?
+  deCidade       String?
+  cep            String?
+  diretoriaId    Int
+  diretoria      Diretoria  @relation(fields: [diretoriaId], references: [id])
+  municipioId    Int?
+  contratos      Contrato[]
+
+  @@map("departamentos")
+}
+
+model TipoContrato {
+  id                  Int        @id @default(autoincrement())
+  nome                String?
+  gerenciamento       String
+  indicativoMetaRisco String     @default("N")
+  contratos           Contrato[]
+
+  @@map("tipo_contrato")
+}
+
+model ContratoStatus {
+  id           Int       @id @default(autoincrement())
+  contratoId   Int
+  statusId     Int
+  dataInclusao DateTime?
+  descricao    String?
+  usuarioId    Int?
+  atendido     Int?
+  aditivoId    Int?
+
+  @@map("contrato_status")
+}
+
+model Pagamento {
+  id             Int      @id @default(autoincrement())
+  competencia    DateTime
+  numeroProcesso String
+  contratoId     Int
+  valor          Decimal?
+  empenho        String?
+  notaFiscal     String?
+  notaLiquidacao String?
+  ordemBancaria  String?
+  glosa          String?
+  valorGlosa     Decimal?
+  mes            String?
+  ano            String?
+
+  @@map("pagamentos")
+}
+
+model Modalidade {
+  id        Int        @id @default(autoincrement())
+  nome      String?
+  contratos Contrato[]
+
+  @@map("modalidades")
+}
+
+model PrestacaoConta {
+  id           Int       @id @default(autoincrement())
+  descricao    String?
+  atendido     String?
+  dataInclusao DateTime?
+  faseId       Int
+  userId       Int
+  contratoId   Int
+
+  @@map("prestacao_contas")
+}
+
+model Fase {
+  id      Int    @id @default(autoincrement())
+  nome    String
+  periodo String
+
+  @@map("fases")
+}
+
+model Fiscal {
+  id              Int       @id @default(autoincrement())
+  contratoId      Int
+  pessoaFisicaCpf String
+  suplente        String
+  dataInclusao    DateTime?
+  presidente      String
+
+  @@map("fiscais")
+}
+
+model Status {
+  id      Int     @id @default(autoincrement())
+  nome    String?
+  fluxo   String?
+  periodo Int?
+
+  @@map("status")
+}
+
+model Historico {
+  id           Int       @id @default(autoincrement())
+  contratoId   Int
+  dataInclusao DateTime?
+  descricao    String?
+  usuarioId    Int?
+  usuario      User?     @relation("HistoricoUsuario", fields: [usuarioId], references: [id])
+
+  @@map("historicos")
+}
+
+model AnexoFiscal {
+  id           Int      @id @default(autoincrement())
+  anexo        String
+  dataRegistro DateTime
+  contratoId   Int
+
+  @@map("anexos_fiscais")
+}
+
+model SituacaoContratual {
+  id        Int        @id @default(autoincrement())
+  descricao String?
+  contratos Contrato[]
+
+  @@map("situacao_contratual")
+}
+
+model AnexoPublicacao {
+  id             Int      @id @default(autoincrement())
+  anexo          String?
+  contratoId     Int
+  dataPublicacao DateTime
+
+  @@map("anexos_publicacao")
+}
+
+model Penalidade {
+  id           Int      @id @default(autoincrement())
+  dataRegistro DateTime
+  arquivo      String?
+  contratoId   Int
+  userId       Int
+
+  @@map("penalidades")
+}
+
+model Contrato {
+  id                   Int                 @id @default(autoincrement())
+  numeroProcesso       String?
+  numeroContrato       String?
+  periodo              String?
+  parentId             Int?
+  parent               Contrato?           @relation("Aditivos", fields: [parentId], references: [id])
+  aditivos             Contrato[]          @relation("Aditivos")
+  dataInclusao         DateTime?
+  dataInicio           DateTime?
+  dataTermino          DateTime?
+  valorInicial         Decimal?
+  valorMensal          Decimal?
+  valorTotal           Decimal?
+  departamentoId       Int?
+  departamento         Departamento?       @relation(fields: [departamentoId], references: [id])
+  pessoaFisicaId       String?
+  suplenteId           String?
+  prestadorServicoId   Int?
+  prestadorServico     PrestadorServico?   @relation(fields: [prestadorServicoId], references: [id])
+  tipoContratoId       Int?
+  tipoContrato         TipoContrato?       @relation(fields: [tipoContratoId], references: [id])
+  modalidadeId         Int?
+  modalidade           Modalidade?         @relation(fields: [modalidadeId], references: [id])
+  situacaoContratualId Int?
+  situacaoContratual   SituacaoContratual? @relation(fields: [situacaoContratualId], references: [id])
+  objeto               String
+  anexoTipo            String?
+  anexo                String?
+  projetoBasico        String?
+  numeroModalidade     String?
+  naPresidencia        Int?
+  prestacaoRealizada   String?
+  numeroFiscais        String?
+
+  @@map("contratos")
 }
