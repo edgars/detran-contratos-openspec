@@ -8,6 +8,10 @@ export type ColumnDef = {
   format?: ColumnFormat;
   /** Caminho em objeto incluído, ex.: "diretoria.deDiretoria". */
   path?: string;
+  /** Alinhamento; números e valores à direita. */
+  align?: "left" | "right";
+  /** Coluna secundária: some em telas estreitas. */
+  secondary?: boolean;
 };
 
 export type Option = { value: string; label: string };
@@ -37,6 +41,10 @@ export type FieldDef = {
   description?: string;
   /** Só aparece ao criar (ex.: senha inicial). */
   createOnly?: boolean;
+  /** Seção do formulário (campos com a mesma seção ficam agrupados, na ordem em que aparecem). */
+  section?: string;
+  /** Largura no grid do formulário: "full" (linha inteira) ou "half" (metade em telas largas). */
+  span?: "full" | "half";
 };
 
 export type ListFilter = {
