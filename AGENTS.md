@@ -33,7 +33,18 @@ One change per run, in this order:
   016-penalidades
   017-contratos
   018-deployment
+  -- segunda etapa (ordem por dependência, não numérica) --
+  024-kit-robustez
+  022-pessoas-fornecedores
+  020-contratos-complementos
+  021-prestacao-contas-fluxo
+  019-relatorios
+  023-perfis-acesso
+  025-migracao-legado
+  026-producao
 ```
+
+The legacy evidence these changes rely on (read from the RNC MCP) is in `docs/legado/`.
 
 1. **Apply** — OpenSpec 2.x: `/openspec-apply-change <change-id>` (Codex: `$openspec-apply-change`);
    OpenSpec 1.x: `/opsx:apply <change-id>`. Read `proposal.md`, `design.md` and `specs/`, implement every item

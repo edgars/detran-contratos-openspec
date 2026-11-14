@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Complementos do cadastro de contratos — projeto básico em PDF, Presidência, nº de fiscais, limites do legado, impressão, andamento por status, vigência pela data do próprio contrato e exclusão segura"
+affected_areas:
+  - contratos
