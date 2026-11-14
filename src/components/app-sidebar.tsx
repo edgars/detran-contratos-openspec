@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLogo, BrandMark } from "@/components/brand/logo";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -13,7 +15,6 @@ import {
   FileText,
   Gavel,
   History,
-  Landmark,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -96,12 +97,15 @@ export function AppSidebar() {
               className="h-10 hover:bg-sidebar-accent/70 group-data-[collapsible=icon]:size-8!"
               render={<Link href="/" onClick={onNavigate} aria-label="DETRAN-RJ, Gestão de contratos: início" />}
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                <Landmark className="size-4" aria-hidden />
-              </span>
-              <span className="grid min-w-0 flex-1 leading-tight">
-                <span className="truncate text-sm font-semibold tracking-tight">DETRAN-RJ</span>
-                <span className="truncate text-xs text-sidebar-foreground/70">Gestão de contratos</span>
+              {/* Menu recolhido: só o símbolo "D"; aberto: logo completa + nome do sistema. */}
+              <BrandMark className="hidden size-5! shrink-0 group-data-[collapsible=icon]:block" title="" />
+              <span className="flex min-w-0 flex-1 items-center gap-2.5 group-data-[collapsible=icon]:hidden">
+                <BrandLogo className="h-6! w-[125px]! shrink-0" title="" />
+                <span className="truncate border-l border-sidebar-border pl-2.5 text-xs leading-tight text-sidebar-foreground/70">
+                  Gestão de
+                  <br />
+                  contratos
+                </span>
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>

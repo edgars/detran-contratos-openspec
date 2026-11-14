@@ -51,6 +51,9 @@
 }
 
 :root {
+  /* Marca DETRAN-RJ (logo oficial). */
+  --brand-blue: #0176ce;
+  --brand-green: #00ba5e;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -92,6 +95,9 @@
 }
 
 .dark {
+  /* Marca em tons mais claros: contraste ≥ 7:1 sobre o fundo escuro. */
+  --brand-blue: #4ca6f0;
+  --brand-green: #2bd47e;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

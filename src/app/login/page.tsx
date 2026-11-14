@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { LandmarkIcon } from "lucide-react";
+import { BrandLogo } from "@/components/brand/logo";
 import { LoginForm } from "./login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -13,17 +13,13 @@ export default function LoginPage() {
 
       <main className="flex flex-1 items-center justify-center px-6 pb-8">
         <div className="w-full max-w-sm">
-          <div className="mb-10 flex items-center gap-3">
-            <span
-              aria-hidden
-              className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"
-            >
-              <LandmarkIcon className="size-5" strokeWidth={1.75} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm leading-tight font-semibold">DETRAN-RJ</p>
-              <p className="text-sm leading-tight text-muted-foreground">Gestão de contratos</p>
-            </div>
+          <div className="mb-10 flex items-center gap-4">
+            <BrandLogo className="h-9 w-auto shrink-0" title="DETRAN-RJ" />
+            <p className="border-l pl-4 text-sm leading-tight text-muted-foreground">
+              Gestão de
+              <br />
+              contratos
+            </p>
           </div>
 
           <h1 className="text-2xl font-semibold tracking-tight text-balance">Entrar no sistema</h1>
