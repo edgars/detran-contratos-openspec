@@ -3,7 +3,23 @@
  * Todo formulário e toda lista usam estes formatadores; nunca formatar inline.
  */
 
+import { applyMask, MASKS } from "./mask";
+
 const pad = (n: number) => String(n).padStart(2, "0");
+
+const docDigits = (value: string | null | undefined) => (value == null ? "" : String(value).replace(/\D/g, ""));
+
+/** CPF gravado só com dígitos exibido como `###.###.###-##` (022-pessoas-fornecedores, D1). Aceita valor já mascarado. */
+export function formatCpf(value: string | null | undefined): string {
+  const digits = docDigits(value);
+  return digits ? applyMask(digits, MASKS.cpf) : "";
+}
+
+/** CNPJ gravado só com dígitos exibido como `##.###.###/####-##` (022-pessoas-fornecedores, D1). Aceita valor já mascarado. */
+export function formatCnpj(value: string | null | undefined): string {
+  const digits = docDigits(value);
+  return digits ? applyMask(digits, MASKS.cnpj) : "";
+}
 
 /** Formata uma data como `dd/MM/yyyy`. Datas sem hora são tratadas em UTC para não mudar de dia. */
 export function formatDate(value: Date | string | null | undefined): string {

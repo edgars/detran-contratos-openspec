@@ -1,13 +1,7 @@
-import { EntityList } from "@/components/crud/entity-list";
-import { prestacaoContas } from "@/lib/entities/prestacao_contas";
+import { PrestacaoLista } from "./prestacao-lista";
 
-export default function PrestacaoContasPage() {
-  return (
-    <EntityList
-      title={prestacaoContas.title}
-      api={prestacaoContas.api}
-      basePath={prestacaoContas.basePath}
-      columns={prestacaoContas.columns}
-    />
-  );
+/** Prestação de contas › Pendentes / Realizadas (021-prestacao-contas-fluxo). A aba fica em `?situacao=`. */
+export default async function PrestacaoContasPage({ searchParams }: { searchParams: Promise<{ situacao?: string }> }) {
+  const { situacao } = await searchParams;
+  return <PrestacaoLista situacaoInicial={situacao === "realizadas" ? "realizadas" : "pendentes"} />;
 }

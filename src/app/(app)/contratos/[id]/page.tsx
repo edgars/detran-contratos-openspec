@@ -80,6 +80,29 @@ function PdfLink({ nome, label = "Ver PDF" }: { nome: string | null; label?: str
   );
 }
 
+const NAO_ENCONTRADO = " (não encontrado em pessoas físicas)";
+
+/** "Nome — documento" com o documento discreto; CPF órfão com o aviso em destaque (o texto lido é o rótulo inteiro). */
+function parte(rotulo: string | null): React.ReactNode {
+  if (!rotulo) return EMPTY;
+  if (rotulo.endsWith(NAO_ENCONTRADO)) {
+    return (
+      <>
+        <span className="tabular-nums">{rotulo.slice(0, -NAO_ENCONTRADO.length)}</span>
+        <span className="font-normal text-amber-800 dark:text-amber-300">{NAO_ENCONTRADO}</span>
+      </>
+    );
+  }
+  const corte = rotulo.lastIndexOf(" — ");
+  if (corte < 0) return rotulo;
+  return (
+    <>
+      {rotulo.slice(0, corte)}
+      <span className="font-normal text-muted-foreground tabular-nums">{rotulo.slice(corte)}</span>
+    </>
+  );
+}
+
 type Item = { label: string; value: React.ReactNode; wide?: boolean; numeric?: boolean };
 
 function Secao({ id, title, action, children }: { id: string; title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -117,7 +140,7 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
   const id = /^\d+$/.test(raw) ? Number(raw) : null;
   const detalhe = id ? await getContratoDetalhe(id) : null;
   if (!detalhe) notFound();
-  const { contrato: c, gestor, suplente, publicacoes, fiscais } = detalhe;
+  const { contrato: c, gestor, suplente, fornecedor, publicacoes, fiscais } = detalhe;
 
   const ehAditivo = Boolean(c.parentId);
   // Vigência efetiva: a maior data de vencimento entre o contrato e seus aditivos.
@@ -139,9 +162,10 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
   ];
   const partes: Item[] = [
     { label: "Unidade gestora", value: text(c.departamento?.deDepartamento) },
-    { label: "Fornecedor", value: text(c.prestadorServico?.deRazaoSocial) },
-    { label: "Gestor", value: text(gestor ?? c.pessoaFisicaId) },
-    { label: "Gestor suplente", value: text(suplente ?? c.suplenteId) },
+    // "Nome — documento" (022-pessoas-fornecedores, D10); CPF sem pessoa aparece com o aviso.
+    { label: "Fornecedor", value: parte(fornecedor) },
+    { label: "Gestor", value: parte(gestor) },
+    { label: "Gestor suplente", value: parte(suplente) },
   ];
   const valores: Item[] = [
     { label: "Data de início", value: date(c.dataInicio), numeric: true },

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, useEffect, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Breadcrumb,
@@ -22,8 +22,45 @@ const FIXED: Record<string, string> = {
   aditivos: "Aditivos",
 };
 
+/**
+ * Rótulo definido pela página aberta (021): `last` troca o último nível (ex.: "#12" → "Contrato 001/2026");
+ * `append` acrescenta um nível sem link (ex.: a aba "Pendentes"). Vale só para o `pathname` informado.
+ */
+export type CrumbOverride = { pathname: string; last?: string; append?: string };
+
+let currentOverride: CrumbOverride | null = null;
+const listeners = new Set<() => void>();
+const subscribe = (fn: () => void) => {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+};
+const setOverride = (value: CrumbOverride | null) => {
+  currentOverride = value;
+  listeners.forEach((fn) => fn());
+};
+
+/** Componente sem saída visual: a página declara o rótulo da trilha enquanto está montada. */
+export function BreadcrumbOverride({ pathname, last, append }: CrumbOverride) {
+  useEffect(() => {
+    const value = { pathname, last, append };
+    setOverride(value);
+    return () => {
+      if (currentOverride === value) setOverride(null);
+    };
+  }, [pathname, last, append]);
+  return null;
+}
+
 /** Trilha da rota atual. Segmentos sem página própria (ex.: "aditivos", "conta") não viram link. */
-export function crumbsFor(pathname: string): Crumb[] {
+export function crumbsFor(pathname: string, override?: CrumbOverride | null): Crumb[] {
+  const crumbs = baseCrumbs(pathname);
+  if (!override || override.pathname !== pathname || crumbs.length === 0) return crumbs;
+  if (override.last) crumbs[crumbs.length - 1] = { ...crumbs[crumbs.length - 1], label: override.last };
+  if (override.append) crumbs.push({ label: override.append });
+  return crumbs;
+}
+
+function baseCrumbs(pathname: string): Crumb[] {
   if (pathname === "/conta/senha") return [{ label: "Trocar senha" }];
   const parts = pathname.split("/").filter(Boolean);
   const crumbs: Crumb[] = [];
@@ -46,7 +83,8 @@ export function crumbsFor(pathname: string): Crumb[] {
 
 export function AppBreadcrumb() {
   const pathname = usePathname();
-  const crumbs = crumbsFor(pathname);
+  const override = useSyncExternalStore(subscribe, () => currentOverride, () => null);
+  const crumbs = crumbsFor(pathname, override);
   if (crumbs.length === 0) {
     return (
       <Breadcrumb className="min-w-0">

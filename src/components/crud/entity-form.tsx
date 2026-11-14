@@ -27,6 +27,7 @@ import { MaskedInput } from "@/components/masked-input";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OptionSelect } from "./option-select";
+import { RemoteLookup } from "./remote-lookup";
 import { useLookupOptions } from "./use-options";
 import type { FieldDef } from "./types";
 
@@ -190,6 +191,20 @@ function FieldControl({
           allowEmpty={!field.required}
         />
       );
+    case "search":
+      // Busca remota (tabelas grandes de referência; 022-pessoas-fornecedores, D6).
+      return field.lookup ? (
+        <RemoteLookup
+          id={id}
+          value={value}
+          lookup={field.lookup}
+          invalid={invalid}
+          describedBy={describedBy}
+          required={field.required}
+          allowClear={!field.required}
+          onChange={onChange}
+        />
+      ) : null;
     case "toggle": {
       const [on, off] = field.toggleValues ?? ["S", "N"];
       const checked = toggleOn(field, value);

@@ -116,3 +116,16 @@ Parâmetros de `GET /api/prestacao_contas/contratos` (filtros, nunca colunas —
 - Quais são os valores reais de `fases.periodo` em produção (só números, como "30"?) e em que ordem o legado mostrava os prazos e a lista (ordenação padrão)?
 - O fluxo deve recusar contrato que não atende aos critérios (ex.: aditivo, não vencido)? Esta change só exige que o contrato exista.
 - A permissão de prestação de contas é perfil próprio ou capacidade do Gestor de contrato (`docs/legado/perfis-acesso.md`)? Decisão da 023.
+
+### Registro do apply (14/11/2026)
+
+- **RK-…**: o MCP da RNC não estava conectado no apply (`RNC_MCP_URL` ausente); `findRules` não foi rodado. Os pontos de regra levam `// Legado: docs/legado/prestacao-contas.md — …` em `src/lib/prestacao/criterios.ts` e `src/lib/entities/prestacao_contas.server.ts`. Continua aberto.
+- **Chave do gestor**: a 022 trocou `contratos.pessoaFisicaId` para CPF (11 dígitos) e criou `pessoasPorCpf` em `src/lib/reference/pessoas.ts`. `gestorKeysPorNome` devolve `pessoas_fisicas.cpf` (não mais `idPessoaFisica`) e `nomesGestores` usa `pessoasPorCpf` (só leitura, sem editar o helper). A lista não exibe coluna de gestor (não está entre as colunas do legado); o nome só é usado na busca e na ordenação.
+- **Ordem das colunas**: o `EntityList` faz da 1ª coluna o link da linha; para cumprir "Nº contrato (link para o fluxo)", a lista começa por Nº contrato e depois Nº processo (o legado mostra processo antes de contrato). A linha inteira também abre o fluxo.
+- **Página 1 ao trocar de aba**: o `EntityList` da 024 não volta à página 1 quando `extraParams` muda; a tela remonta a lista com `key={situacao}` (efeito colateral: busca e filtros são limpos ao trocar de aba). Se a 024 passar a reiniciar a página, basta tirar o `key`.
+- **Ordenação na tela**: a ordenação é o filtro "Ordenar por" (`ordenar=campo:dir`), não cabeçalho clicável; a API não lê `sort=`.
+- **Fluxo de contrato que não atende aos critérios**: aberto para qualquer contrato existente (inclusive aditivo); `/prestacao_contas/<texto>` (ex.: `/new`) responde 404.
+- **Ordem das fases dentro do prazo**: por `id` (ordem de cadastro); o legado não documenta.
+- **Breadcrumb**: `src/components/shell/app-breadcrumb.tsx` ganhou `BreadcrumbOverride` (a página declara o último rótulo, "Contrato 010/2024", ou acrescenta a aba "Pendentes"/"Realizadas").
+- **Selo do prazo final**: a tela avisa, no prazo "30", que gravar com Atendido ligado conclui; o toast diz quando a gravação concluiu.
+

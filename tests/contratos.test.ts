@@ -6,6 +6,9 @@ import * as collection from "@/app/api/contratos/route";
 import * as item from "@/app/api/contratos/[id]/route";
 import * as aditivos from "@/app/api/contratos/[id]/aditivos/route";
 import * as pessoasFisicas from "@/app/api/pessoas_fisicas/route";
+import * as prestadores from "@/app/api/prestadores_servicos/route";
+import { getContratoDetalhe } from "@/lib/entities/contratos.server";
+import { resolveOption } from "@/components/crud/remote-search";
 import { contratos } from "@/lib/entities/contratos";
 import { formatCurrency } from "@/lib/format";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -24,6 +27,12 @@ let depto2Id: number;
 let fornecedorId: number;
 let fornecedor2Id: number;
 let situacaoId: number;
+
+// 022-pessoas-fornecedores: gestor e suplente gravam o CPF (11 dígitos).
+const MARIA = "52998224725";
+const JOAO = "11144477735";
+const DV_INVALIDO = "52998224724";
+const ORFAO = "39053344705"; // não está em pessoas_fisicas
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** Mesmo dia, como a API grava (meia-noite UTC). */
@@ -82,13 +91,19 @@ describe("017-contratos", () => {
     const diretoria = await prisma.diretoria.create({ data: { deDiretoria: "Diretoria Geral", codigo: "DG" } });
     deptoId = (await prisma.departamento.create({ data: { deDepartamento: "Coordenadoria de TI", diretoriaId: diretoria.id } })).id;
     depto2Id = (await prisma.departamento.create({ data: { deDepartamento: "Almoxarifado", diretoriaId: diretoria.id } })).id;
-    fornecedorId = (await prisma.prestadorServico.create({ data: { deRazaoSocial: "Limpa Tudo Ltda" } })).id;
-    fornecedor2Id = (await prisma.prestadorServico.create({ data: { deRazaoSocial: "Constrói SA" } })).id;
+    // 022: fornecedores com CNPJ, pessoas com CPF (as chaves do legado).
+    const fornecedor = (deRazaoSocial: string, cnpj: string) =>
+      prisma.prestadorServico.upsert({ where: { cnpj }, update: { deRazaoSocial }, create: { deRazaoSocial, cnpj } });
+    fornecedorId = (await fornecedor("Limpa Tudo Ltda", "11222333000181")).id;
+    fornecedor2Id = (await fornecedor("Constrói SA", "33000167000101")).id;
     situacaoId = (await prisma.situacaoContratual.create({ data: { descricao: "Vigente" } })).id;
+    await prisma.pessoaFisica.deleteMany({ where: { cpf: { in: [MARIA, JOAO, DV_INVALIDO] } } });
     await prisma.pessoaFisica.createMany({
       data: [
-        { idPessoaFisica: 1001, deNome: "Maria Gestora", dtNascimento: new Date("1980-01-01") },
-        { idPessoaFisica: 1002, deNome: "João Suplente", dtNascimento: new Date("1985-01-01") },
+        { idPessoaFisica: 1001, cpf: MARIA, deNome: "Maria Gestora", dtNascimento: new Date("1980-01-01") },
+        { idPessoaFisica: 1002, cpf: JOAO, deNome: "João Suplente", dtNascimento: new Date("1985-01-01") },
+        // Pessoa do `global` com DV inválido (022, D9): continua escolhível.
+        { idPessoaFisica: 1003, cpf: DV_INVALIDO, deNome: "Pedro Dígito Errado", dtNascimento: new Date("1990-01-01") },
       ],
     });
   });
@@ -152,10 +167,10 @@ describe("017-contratos", () => {
   it("Filtros da lista: q, departamentoId, prestadorServicoId, gestor e situacaoContratualId (parâmetros, nunca colunas)", async () => {
     await loginAs();
     await prisma.contrato.create({
-      data: { numeroContrato: "FLT-A", objeto: "Filtro A", departamentoId: depto2Id, prestadorServicoId: fornecedor2Id, pessoaFisicaId: "1001" },
+      data: { numeroContrato: "FLT-A", objeto: "Filtro A", departamentoId: depto2Id, prestadorServicoId: fornecedor2Id, pessoaFisicaId: MARIA },
     });
     await prisma.contrato.create({
-      data: { numeroContrato: "FLT-B", objeto: "Filtro B", departamentoId: deptoId, prestadorServicoId: fornecedorId, suplenteId: "1001", situacaoContratualId: situacaoId },
+      data: { numeroContrato: "FLT-B", objeto: "Filtro B", departamentoId: deptoId, prestadorServicoId: fornecedorId, suplenteId: MARIA, situacaoContratualId: situacaoId },
     });
     const nums = async (qs: string) =>
       (await (await collection.GET(jsonRequest(`/api/contratos?q=FLT-&sort=numeroContrato&${qs}`))).json()).items.map(
@@ -164,7 +179,7 @@ describe("017-contratos", () => {
     expect(await nums("")).toEqual(["FLT-A", "FLT-B"]);
     expect(await nums(`departamentoId=${depto2Id}`)).toEqual(["FLT-A"]);
     expect(await nums(`prestadorServicoId=${fornecedorId}`)).toEqual(["FLT-B"]);
-    expect(await nums("gestor=1001")).toEqual(["FLT-A", "FLT-B"]);
+    expect(await nums(`gestor=${MARIA}`)).toEqual(["FLT-A", "FLT-B"]);
     expect(await nums(`situacaoContratualId=${situacaoId}`)).toEqual(["FLT-B"]);
     // Busca por objeto e por número do processo
     expect(await (await collection.GET(jsonRequest("/api/contratos?q=Filtro%20B"))).json()).toMatchObject({ total: 1 });
@@ -180,8 +195,8 @@ describe("017-contratos", () => {
       numeroContrato: "VAL-001",
       modalidadeId: String(modalidadeId),
       numeroModalidade: "PE 10/2026",
-      pessoaFisicaId: "1001",
-      suplenteId: "1002",
+      pessoaFisicaId: MARIA,
+      suplenteId: JOAO,
       valorMensal: "100,00",
       valorTotal: "1.200,00",
       situacaoContratualId: String(situacaoId),
@@ -439,12 +454,15 @@ describe("017-contratos", () => {
     expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).departamentoId).toBe(depto2Id);
   });
 
-  it("Escolher o fornecedor: lookup /api/prestadores_servicos (deRazaoSocial) grava o id em prestadorServicoId", async () => {
+  // 022-pessoas-fornecedores › contratos › "Escolher o fornecedor" (busca remota, grava o id)
+  it("Escolher o fornecedor: busca remota em /api/prestadores_servicos (razão social e CNPJ) grava o id em prestadorServicoId", async () => {
     await loginAs();
     expect(lookup("prestadorServicoId")).toMatchObject({
-      kind: "lookup",
-      lookup: { api: "/api/prestadores_servicos", labelField: "deRazaoSocial" },
+      kind: "search",
+      lookup: { api: "/api/prestadores_servicos", labelField: "deRazaoSocial", valueField: "id", detailField: "cnpj", detailFormat: "cnpj" },
     });
+    const lista = await (await prestadores.GET(jsonRequest("/api/prestadores_servicos?size=20"))).json();
+    expect(lista.items.map((i: { id: number }) => i.id)).toEqual(expect.arrayContaining([fornecedorId, fornecedor2Id]));
     const c = await criar({ numeroContrato: "LK-FORN", prestadorServicoId: String(fornecedor2Id) });
     expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).prestadorServicoId).toBe(fornecedor2Id);
   });
@@ -459,27 +477,32 @@ describe("017-contratos", () => {
     expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).situacaoContratualId).toBeNull();
   });
 
-  it("Buscar o gestor: busca em /api/pessoas_fisicas por nome e grava o identificador em pessoaFisicaId/suplenteId", async () => {
+  // 022-pessoas-fornecedores › contratos › "Buscar o gestor"
+  it("Buscar o gestor: busca remota em /api/pessoas_fisicas?comCpf=1 por nome e grava o CPF em pessoaFisicaId/suplenteId", async () => {
     await loginAs();
     expect(lookup("pessoaFisicaId")).toMatchObject({
-      kind: "lookup",
-      lookup: { api: "/api/pessoas_fisicas", labelField: "deNome", valueField: "idPessoaFisica" },
+      kind: "search",
+      lookup: { api: "/api/pessoas_fisicas?comCpf=1", labelField: "deNome", valueField: "cpf", detailField: "cpf", detailFormat: "cpf" },
     });
     expect(lookup("suplenteId")?.lookup).toEqual(lookup("pessoaFisicaId")?.lookup);
-    const busca = await (await pessoasFisicas.GET(jsonRequest("/api/pessoas_fisicas?q=Gestora"))).json();
+    const busca = await (await pessoasFisicas.GET(jsonRequest("/api/pessoas_fisicas?comCpf=1&q=Gestora&size=20"))).json();
     expect(busca.items).toHaveLength(1);
-    const escolhida = String(busca.items[0].idPessoaFisica);
-    const c = await criar({ numeroContrato: "LK-GEST", pessoaFisicaId: escolhida, suplenteId: "1002" });
+    const escolhida = String(busca.items[0].cpf);
+    const c = await criar({ numeroContrato: "LK-GEST", pessoaFisicaId: escolhida, suplenteId: JOAO });
     const gravado = await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } });
-    expect(gravado).toMatchObject({ pessoaFisicaId: "1001", suplenteId: "1002" });
+    expect(gravado).toMatchObject({ pessoaFisicaId: MARIA, suplenteId: JOAO });
     const { getContratoDetalhe } = await import("@/lib/entities/contratos.server");
-    expect(await getContratoDetalhe(c.id)).toMatchObject({ gestor: "Maria Gestora", suplente: "João Suplente" });
+    expect(await getContratoDetalhe(c.id)).toMatchObject({
+      gestor: "Maria Gestora — 529.982.247-25",
+      suplente: "João Suplente — 111.444.777-35",
+    });
   });
 
   it("Integridade das FKs (tasks 1.2): id inexistente em cada lookup responde 409 e parentId inválido é recusado pelo banco", async () => {
     await loginAs();
     const antes = await prisma.contrato.count();
-    for (const campo of ["tipoContratoId", "modalidadeId", "departamentoId", "prestadorServicoId", "situacaoContratualId"]) {
+    // prestadorServicoId: 400 "Fornecedor não encontrado" desde a 022 (teste próprio abaixo).
+    for (const campo of ["tipoContratoId", "modalidadeId", "departamentoId", "situacaoContratualId"]) {
       const res = await collection.POST(jsonRequest("/api/contratos", "POST", valido({ numeroContrato: `FK-${campo}`, [campo]: "999999" })));
       expect(res.status, campo).toBe(409);
     }
@@ -530,5 +553,150 @@ describe("017-contratos", () => {
       rmSync(uploadDir(), { recursive: true, force: true });
       process.env.UPLOAD_DIR = original;
     }
+  });
+  // ================================================================== 022-pessoas-fornecedores › contratos
+  describe("022-pessoas-fornecedores", () => {
+    /** `fetch` do componente de busca remota servido pelas rotas reais de referência. */
+    const fetchReferencia = async (url: string) => {
+      const req = jsonRequest(url);
+      return url.startsWith("/api/prestadores_servicos") ? prestadores.GET(req) : pessoasFisicas.GET(req);
+    };
+
+    it("Buscar o gestor pelo CPF: digitar 529.982.247 mostra 'Maria Gestora — 529.982.247-25' e salva 52998224725", async () => {
+      await loginAs();
+      const busca = await (await fetchReferencia("/api/pessoas_fisicas?comCpf=1&q=529.982.247&size=20")).json();
+      const { optionFromItem } = await import("@/components/crud/remote-search");
+      const opcoes = busca.items.map((i: Record<string, unknown>) => optionFromItem(contratos.fields.find((f) => f.name === "pessoaFisicaId")!.lookup!, i));
+      const maria = opcoes.find((o: { label: string }) => o.label === "Maria Gestora — 529.982.247-25");
+      expect(maria?.value).toBe(MARIA);
+      const c = await criar({ numeroContrato: "022-CPF", pessoaFisicaId: maria.value });
+      expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).pessoaFisicaId).toBe("52998224725");
+    });
+
+    it("Buscar o fornecedor pelo CNPJ: digitar 11.222.333 mostra 'Limpa Tudo Ltda — 11.222.333/0001-81' e grava o id", async () => {
+      await loginAs();
+      const busca = await (await fetchReferencia("/api/prestadores_servicos?q=11.222.333&size=20")).json();
+      const { optionFromItem } = await import("@/components/crud/remote-search");
+      const opcoes = busca.items.map((i: Record<string, unknown>) => optionFromItem(contratos.fields.find((f) => f.name === "prestadorServicoId")!.lookup!, i));
+      expect(opcoes.map((o: { label: string }) => o.label)).toEqual(["Limpa Tudo Ltda — 11.222.333/0001-81"]);
+      const c = await criar({ numeroContrato: "022-CNPJ", prestadorServicoId: opcoes[0].value });
+      expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).prestadorServicoId).toBe(fornecedorId);
+    });
+
+    it("CPF com máscara pela API: suplenteId 111.444.777-35 é gravado como 11144477735", async () => {
+      await loginAs();
+      const c = await criar({ numeroContrato: "022-MASC", suplenteId: "111.444.777-35" });
+      expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).suplenteId).toBe("11144477735");
+    });
+
+    it("CPF que não existe: pessoaFisicaId 39053344705 → 400 'Gestor não encontrado em pessoas físicas', nada gravado", async () => {
+      await loginAs();
+      const antes = await prisma.contrato.count();
+      const res = await collection.POST(jsonRequest("/api/contratos", "POST", valido({ pessoaFisicaId: ORFAO })));
+      expect(res.status).toBe(400);
+      expect((await res.json()).errors).toMatchObject({ pessoaFisicaId: "Gestor não encontrado em pessoas físicas" });
+      const sup = await collection.POST(jsonRequest("/api/contratos", "POST", valido({ suplenteId: ORFAO })));
+      expect((await sup.json()).errors).toMatchObject({ suplenteId: "Gestor suplente não encontrado em pessoas físicas" });
+      expect(await prisma.contrato.count()).toBe(antes);
+    });
+
+    it("CPF incompleto: suplenteId 1114447773 → 400 no campo suplenteId, nada gravado", async () => {
+      await loginAs();
+      const antes = await prisma.contrato.count();
+      const res = await collection.POST(jsonRequest("/api/contratos", "POST", valido({ suplenteId: "1114447773" })));
+      expect(res.status).toBe(400);
+      expect((await res.json()).errors.suplenteId).toBe("Gestor suplente: CPF deve ter 11 dígitos");
+      expect(await prisma.contrato.count()).toBe(antes);
+    });
+
+    it("Gestor do legado fora da referência: editar só o objeto mantém pessoaFisicaId 39053344705", async () => {
+      await loginAs();
+      const legado = await prisma.contrato.create({
+        data: { ...valido(), numeroContrato: "022-LEG", tipoContratoId: tipoId, departamentoId: deptoId, prestadorServicoId: fornecedorId, dataInicio: undefined, dataTermino: undefined, pessoaFisicaId: ORFAO },
+      });
+      const atual = await (await item.GET(jsonRequest(`/api/contratos/${legado.id}`), idParams(legado.id))).json();
+      const res = await item.PUT(
+        jsonRequest(`/api/contratos/${legado.id}`, "PUT", valido({ numeroContrato: "022-LEG", objeto: "Objeto editado", pessoaFisicaId: atual.pessoaFisicaId })),
+        idParams(legado.id),
+      );
+      expect(res.status).toBe(200);
+      expect(await prisma.contrato.findUniqueOrThrow({ where: { id: legado.id } })).toMatchObject({ objeto: "Objeto editado", pessoaFisicaId: ORFAO });
+      // Trocar por outro CPF inexistente na edição é conferido.
+      const outro = await item.PUT(jsonRequest(`/api/contratos/${legado.id}`, "PUT", valido({ pessoaFisicaId: "11111111111" })), idParams(legado.id));
+      expect(outro.status).toBe(400);
+    });
+
+    it("Pessoa do global com DV inválido (app-shell): escolher 52998224724 como gestor grava o contrato", async () => {
+      await loginAs();
+      const c = await criar({ numeroContrato: "022-DV", pessoaFisicaId: DV_INVALIDO });
+      expect((await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } })).pessoaFisicaId).toBe("52998224724");
+    });
+
+    it("Fornecedor inexistente: prestadorServicoId 999999 → 400 'Fornecedor não encontrado', nada gravado", async () => {
+      await loginAs();
+      const antes = await prisma.contrato.count();
+      const res = await collection.POST(jsonRequest("/api/contratos", "POST", valido({ prestadorServicoId: "999999" })));
+      expect(res.status).toBe(400);
+      expect((await res.json()).errors).toEqual({ prestadorServicoId: "Fornecedor não encontrado" });
+      expect(await prisma.contrato.count()).toBe(antes);
+    });
+
+    it("Salvar sem fornecedor: RK-37f294a3dc8e — 400 'Informe o fornecedor' (continua com a 022)", () =>
+      semCampo("prestadorServicoId", "Informe o fornecedor"));
+
+    it("Filtrar pelo gestor: filtro Gestor ou suplente é busca remota e gestor=52998224725 traz FLT-A e FLT-B", async () => {
+      await loginAs();
+      expect(contratos.filters.find((f) => f.name === "gestor")).toMatchObject({ kind: "search", lookup: { valueField: "cpf", detailFormat: "cpf" } });
+      expect(contratos.filters.find((f) => f.name === "prestadorServicoId")).toMatchObject({ kind: "search", lookup: { valueField: "id", detailFormat: "cnpj" } });
+      // O operador busca "Maria" e escolhe a opção: o valor do filtro é o CPF.
+      const busca = await (await fetchReferencia("/api/pessoas_fisicas?comCpf=1&q=Maria&size=20")).json();
+      const { optionFromItem } = await import("@/components/crud/remote-search");
+      const opcao = optionFromItem(contratos.filters.find((f) => f.name === "gestor")!.lookup!, busca.items[0]);
+      expect(opcao).toMatchObject({ value: MARIA, label: "Maria Gestora — 529.982.247-25" });
+      const lista = await (await collection.GET(jsonRequest(`/api/contratos?q=FLT-&sort=numeroContrato&gestor=${opcao.value}`))).json();
+      expect(lista.items.map((c: { numeroContrato: string }) => c.numeroContrato)).toEqual(["FLT-A", "FLT-B"]);
+    });
+
+    it("Filtro com CPF mascarado na URL: gestor=529.982.247-25 dá o mesmo resultado de gestor=52998224725", async () => {
+      await loginAs();
+      const nums = async (g: string) =>
+        (await (await collection.GET(jsonRequest(`/api/contratos?q=FLT-&sort=numeroContrato&gestor=${encodeURIComponent(g)}`))).json()).items.map(
+          (c: { numeroContrato: string }) => c.numeroContrato,
+        );
+      expect(await nums("529.982.247-25")).toEqual(await nums("52998224725"));
+      expect(await nums("529.982.247-25")).toEqual(["FLT-A", "FLT-B"]);
+    });
+
+    it("Gestor encontrado: detalhe mostra 'Maria Gestora — 529.982.247-25' e 'Limpa Tudo Ltda — 11.222.333/0001-81'", async () => {
+      await loginAs();
+      const c = await criar({ numeroContrato: "022-DET", pessoaFisicaId: MARIA });
+      expect(await getContratoDetalhe(c.id)).toMatchObject({
+        gestor: "Maria Gestora — 529.982.247-25",
+        fornecedor: "Limpa Tudo Ltda — 11.222.333/0001-81",
+        suplente: null,
+      });
+    });
+
+    it("Gestor órfão: suplenteId 39053344705 aparece '390.533.447-05 (não encontrado em pessoas físicas)'", async () => {
+      const c = await prisma.contrato.create({ data: { numeroContrato: "022-ORF", objeto: "Órfão", prestadorServicoId: fornecedorId, suplenteId: ORFAO } });
+      expect((await getContratoDetalhe(c.id))?.suplente).toBe("390.533.447-05 (não encontrado em pessoas físicas)");
+    });
+
+    // app-shell › "Abrir uma edição": o campo Gestor resolve o rótulo do valor gravado sem digitação.
+    it("Abrir uma edição: pessoaFisicaId 52998224725 é exibido como 'Maria Gestora — 529.982.247-25'", async () => {
+      await loginAs();
+      const c = await criar({ numeroContrato: "022-EDIT", pessoaFisicaId: MARIA });
+      const lido = await (await item.GET(jsonRequest(`/api/contratos/${c.id}`), idParams(c.id))).json();
+      expect(lido.pessoaFisicaId).toBe(MARIA);
+      const chamadas: string[] = [];
+      const opcao = await resolveOption(lookup("pessoaFisicaId")!.lookup!, lido.pessoaFisicaId, async (url) => {
+        chamadas.push(url);
+        return fetchReferencia(url);
+      });
+      expect(chamadas).toEqual(["/api/pessoas_fisicas?comCpf=1&cpf=52998224725&size=1"]);
+      expect(opcao.label).toBe("Maria Gestora — 529.982.247-25");
+      // Valor gravado que não está na referência: formatado + "(não encontrado)".
+      expect((await resolveOption(lookup("pessoaFisicaId")!.lookup!, ORFAO, fetchReferencia)).label).toBe("390.533.447-05 (não encontrado)");
+    });
   });
 });

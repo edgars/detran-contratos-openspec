@@ -1,12 +1,30 @@
-import type { ColumnDef, FieldDef, ListFilter } from "@/components/crud/types";
+import type { ColumnDef, FieldDef, ListFilter, LookupConfig } from "@/components/crud/types";
 
 /**
  * Tela de Contratos (017-contratos). Configuração usada pela lista, pelo formulário do contrato
  * e pelo formulário de aditivo. A ordem dos campos é a de design.md › Context.
  */
 
-/** Lookup do gestor/suplente: grava `idPessoaFisica` (identificador legado) como texto; ver design.md › Open Questions. */
-const pessoaFisicaLookup = { api: "/api/pessoas_fisicas", labelField: "deNome", valueField: "idPessoaFisica" };
+/**
+ * Busca remota do gestor/suplente (022-pessoas-fornecedores, D6): só pessoas com CPF; grava o CPF
+ * com 11 dígitos, como o legado (`PessoaFisica.CPF = Contrato.pessoa_fisica_id`).
+ */
+export const pessoaFisicaLookup = {
+  api: "/api/pessoas_fisicas?comCpf=1",
+  labelField: "deNome",
+  valueField: "cpf",
+  detailField: "cpf",
+  detailFormat: "cpf",
+} satisfies LookupConfig;
+
+/** Busca remota do fornecedor (022, D3/D6): grava o `id`, mostra razão social e CNPJ. */
+export const prestadorServicoLookup = {
+  api: "/api/prestadores_servicos",
+  labelField: "deRazaoSocial",
+  valueField: "id",
+  detailField: "cnpj",
+  detailFormat: "cnpj",
+} satisfies LookupConfig;
 
 export const contratos = {
   title: "Contratos",
@@ -25,8 +43,8 @@ export const contratos = {
   /** Filtros da lista (design.md › Filtros da lista): parâmetros de `GET /api/contratos`, nunca colunas. */
   filters: [
     { name: "departamentoId", label: "Unidade gestora", kind: "lookup", lookup: { api: "/api/departamentos", labelField: "deDepartamento" } },
-    { name: "prestadorServicoId", label: "Fornecedor", kind: "lookup", lookup: { api: "/api/prestadores_servicos", labelField: "deRazaoSocial" } },
-    { name: "gestor", label: "Gestor ou suplente", kind: "lookup", lookup: pessoaFisicaLookup },
+    { name: "prestadorServicoId", label: "Fornecedor", kind: "search", lookup: prestadorServicoLookup },
+    { name: "gestor", label: "Gestor ou suplente", kind: "search", lookup: pessoaFisicaLookup },
     { name: "situacaoContratualId", label: "Situação contratual", kind: "lookup", lookup: { api: "/api/situacao_contratual", labelField: "descricao" } },
     { name: "vencendoEm", label: "Vencendo em (dias)", kind: "number" },
   ] satisfies ListFilter[],
@@ -38,9 +56,9 @@ export const contratos = {
     { name: "numeroModalidade", label: "Nº da modalidade", kind: "text", section: "Identificação" },
     { name: "objeto", label: "Objeto", kind: "textarea", required: true, section: "Identificação" },
     { name: "departamentoId", label: "Unidade gestora", kind: "lookup", required: true, lookup: { api: "/api/departamentos", labelField: "deDepartamento" }, section: "Partes e responsáveis" },
-    { name: "prestadorServicoId", label: "Fornecedor", kind: "lookup", required: true, lookup: { api: "/api/prestadores_servicos", labelField: "deRazaoSocial" }, section: "Partes e responsáveis" },
-    { name: "pessoaFisicaId", label: "Gestor", kind: "lookup", lookup: pessoaFisicaLookup, section: "Partes e responsáveis" },
-    { name: "suplenteId", label: "Gestor suplente", kind: "lookup", lookup: pessoaFisicaLookup, section: "Partes e responsáveis" },
+    { name: "prestadorServicoId", label: "Fornecedor", kind: "search", required: true, lookup: prestadorServicoLookup, section: "Partes e responsáveis" },
+    { name: "pessoaFisicaId", label: "Gestor", kind: "search", lookup: pessoaFisicaLookup, section: "Partes e responsáveis" },
+    { name: "suplenteId", label: "Gestor suplente", kind: "search", lookup: pessoaFisicaLookup, section: "Partes e responsáveis" },
     { name: "dataInicio", label: "Data de início", kind: "date", required: true, section: "Vigência e valores" },
     { name: "dataTermino", label: "Data de vencimento", kind: "date", required: true, section: "Vigência e valores" },
     { name: "valorMensal", label: "Valor mensal", kind: "money", section: "Vigência e valores" },

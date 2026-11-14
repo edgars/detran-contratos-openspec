@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 vi.mock("next/headers", () => import("./helpers/next-headers-mock"));
 import { beforeAll, describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import * as collection from "@/app/api/tipo_contratos/route";
 import * as item from "@/app/api/tipo_contratos/[id]/route";
@@ -33,7 +34,8 @@ describe("003-tipo-contratos", () => {
 
   it("Salvar um registro válido: grava em tipo_contrato (indicativoMetaRisco default N) e a lista o exibe", async () => {
     await loginAs();
-    expect(tipoContratos.fields.map((f) => f.name)).toEqual(["nome", "gerenciamento"]);
+    // 021: o toggle "Sujeito à prestação de contas" vem depois dos campos existentes.
+    expect(tipoContratos.fields.map((f) => f.name)).toEqual(["nome", "gerenciamento", "prestacaoContas"]);
     expect(tipoContratos.fields[1]).toMatchObject({ kind: "toggle", toggleValues: ["S", "N"] });
     const res = await collection.POST(jsonRequest("/api/tipo_contratos", "POST", { nome: "Prestação de serviço", gerenciamento: "S" }));
     expect(res.status).toBe(201);
@@ -97,5 +99,61 @@ describe("003-tipo-contratos", () => {
   it("sem sessão responde 401", async () => {
     logout();
     expect((await collection.GET(jsonRequest("/api/tipo_contratos"))).status).toBe(401);
+  });
+});
+
+// 021-prestacao-contas-fluxo › specs/tipo-contratos/spec.md: um teste por cenário.
+describe("021 › Tipo de contrato sujeito à prestação de contas", () => {
+  it("Marcar um tipo: PUT liga a flag e os contratos vencidos acima do limite entram na lista", async () => {
+    await loginAs();
+    const campo = tipoContratos.fields.find((f) => f.name === "prestacaoContas");
+    expect(campo).toMatchObject({ label: "Sujeito à prestação de contas", kind: "toggle", toggleValues: ["S", "N"] });
+    expect(campo).not.toHaveProperty("required");
+    const t = await prisma.tipoContrato.create({ data: { nome: "Contrato", gerenciamento: "S" } });
+    expect(t.prestacaoContas).toBe("N");
+    const c = await prisma.contrato.create({
+      data: { objeto: "Marcar tipo", tipoContratoId: t.id, dataTermino: new Date(Date.UTC(2020, 0, 1)), valorTotal: new Prisma.Decimal("700000.00") },
+    });
+    const { GET } = await import("@/app/api/prestacao_contas/contratos/route");
+    const antes = await (await GET(jsonRequest(`/api/prestacao_contas/contratos?tipoContratoId=${t.id}`))).json();
+    expect(antes.total).toBe(0);
+    const res = await item.PUT(
+      jsonRequest(`/api/tipo_contratos/${t.id}`, "PUT", { nome: "Contrato", gerenciamento: "S", prestacaoContas: "S" }),
+      idParams(t.id),
+    );
+    expect(res.status).toBe(200);
+    expect((await prisma.tipoContrato.findUniqueOrThrow({ where: { id: t.id } })).prestacaoContas).toBe("S");
+    const depois = await (await GET(jsonRequest(`/api/prestacao_contas/contratos?tipoContratoId=${t.id}`))).json();
+    expect(depois.items.map((i: { id: number }) => i.id)).toEqual([c.id]);
+  });
+
+  it("Tipo novo nasce desmarcado: sem o toggle (ausente ou vazio) grava prestacaoContas = N", async () => {
+    await loginAs();
+    const ausente = await collection.POST(jsonRequest("/api/tipo_contratos", "POST", { nome: "Novo sem toggle", gerenciamento: "N" }));
+    expect(ausente.status).toBe(201);
+    expect((await ausente.json()).prestacaoContas).toBe("N");
+    const vazio = await collection.POST(jsonRequest("/api/tipo_contratos", "POST", { nome: "Novo vazio", gerenciamento: "N", prestacaoContas: "" }));
+    expect(vazio.status).toBe(201);
+    expect((await vazio.json()).prestacaoContas).toBe("N");
+  });
+
+  it("Valor inválido: prestacaoContas = X → 400 com erro em prestacaoContas e nada é gravado", async () => {
+    await loginAs();
+    const antes = await prisma.tipoContrato.count();
+    const res = await collection.POST(jsonRequest("/api/tipo_contratos", "POST", { nome: "Inválido", gerenciamento: "N", prestacaoContas: "X" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).errors.prestacaoContas).toBeDefined();
+    expect(await prisma.tipoContrato.count()).toBe(antes);
+  });
+
+  it("Filtrar tipos marcados: ?prestacaoContas=S devolve só o tipo marcado", async () => {
+    await loginAs();
+    await prisma.tipoContrato.updateMany({ data: { prestacaoContas: "N" } });
+    const sim = await prisma.tipoContrato.create({ data: { nome: "Marcado", gerenciamento: "N", prestacaoContas: "S" } });
+    await prisma.tipoContrato.create({ data: { nome: "Desmarcado", gerenciamento: "N", prestacaoContas: "N" } });
+    const body = await (await collection.GET(jsonRequest("/api/tipo_contratos?prestacaoContas=S"))).json();
+    expect(body.items.map((i: { id: number }) => i.id)).toEqual([sim.id]);
+    const nao = await (await collection.GET(jsonRequest("/api/tipo_contratos?prestacaoContas=N&size=100"))).json();
+    expect(nao.items.map((i: { id: number }) => i.id)).not.toContain(sim.id);
   });
 });

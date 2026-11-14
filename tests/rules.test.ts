@@ -141,3 +141,27 @@ describe("troca de senha (validação compartilhada; ponto de uso em 005-users)"
     expect(errors).toEqual({});
   });
 });
+
+// 022-pessoas-fornecedores (tasks 1.3): CPF de gestor/suplente/fiscal — dígitos, 11, sem DV.
+describe("optionalCpf / requiredCpf", () => {
+  it("aceita máscara e grava só os dígitos", async () => {
+    const { optionalCpf, requiredCpf } = await import("@/lib/rules/fields");
+    expect(optionalCpf("Gestor").parse("529.982.247-25")).toBe("52998224725");
+    expect(requiredCpf("obrigatório", "incompleto").parse("529.982.247-25")).toBe("52998224725");
+  });
+
+  it("10 dígitos é recusado com a mensagem do campo", async () => {
+    const { optionalCpf, requiredCpf } = await import("@/lib/rules/fields");
+    expect(optionalCpf("Gestor").safeParse("5299822472").error?.issues[0].message).toBe("Gestor: CPF deve ter 11 dígitos");
+    expect(requiredCpf("obrigatório", "incompleto").safeParse("5299822472").error?.issues[0].message).toBe("incompleto");
+  });
+
+  it("DV inválido é aceito (D9) e vazio vira null / obrigatório", async () => {
+    const { optionalCpf, requiredCpf } = await import("@/lib/rules/fields");
+    expect(optionalCpf("Gestor").parse("52998224724")).toBe("52998224724");
+    expect(requiredCpf("obrigatório", "incompleto").parse("52998224724")).toBe("52998224724");
+    expect(optionalCpf("Gestor").parse("")).toBeNull();
+    expect(optionalCpf("Gestor").parse(undefined)).toBeUndefined();
+    expect(requiredCpf("obrigatório", "incompleto").safeParse("").error?.issues[0].message).toBe("obrigatório");
+  });
+});

@@ -7,8 +7,10 @@ import { listReference, type ReferenceTable } from "./tables";
 export function referenceListHandler(table: ReferenceTable) {
   return async function GET(request: Request) {
     if (!(await getSessionUser())) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
-    const p = parsePagination(new URL(request.url).searchParams);
-    const { items, total } = await listReference(table, p);
+    const params = new URL(request.url).searchParams;
+    const p = parsePagination(params);
+    // Os filtros exatos (lista branca por tabela, 022) também vêm da query string.
+    const { items, total } = await listReference(table, p, params);
     return pageResponse(items, total, p);
   };
 }

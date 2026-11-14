@@ -13,5 +13,13 @@ export const tipoContratos = {
     // Obrigatório por RK-82de63b47e64 (regra transversal; ver design.md › Decisions).
     { name: "nome", label: "Nome", kind: "text", required: true },
     { name: "gerenciamento", label: "Gerenciamento", kind: "toggle", required: true, toggleValues: ["S", "N"] },
+    // 021-prestacao-contas-fluxo: define quais tipos entram na lista de prestação de contas.
+    {
+      name: "prestacaoContas",
+      label: "Sujeito à prestação de contas",
+      kind: "toggle",
+      toggleValues: ["S", "N"],
+      description: "Contratos originais deste tipo, vencidos e acima de R$ 650.000,00, entram em Prestação de contas.",
+    },
   ] satisfies FieldDef[],
 };

@@ -6,9 +6,12 @@ import { FieldRuleError, crudHandlers, readBody, type Db, type RawBody } from "@
 import { pageResponse, parsePagination, validationError } from "@/lib/api/http";
 import { UnauthorizedError, requireUser } from "@/lib/auth/session";
 import { ANEXO_CONTRATO, ANEXO_FISCAL, ANEXO_PUBLICACAO, contratoFields } from "@/lib/rules";
-import { optionalString, requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
+import { optionalCpf, optionalString, requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
+import { onlyDigits } from "@/lib/documento";
+import { pessoasPorCpf } from "@/lib/reference/pessoas";
 import type { UploadSession } from "@/lib/uploads";
 import { toDecimal } from "@/lib/money";
+import { formatCnpj, formatCpf } from "@/lib/format";
 
 /**
  * API de Contratos (017-contratos): cadastro, filtros da lista, aditivos e anexos do cadastro.
@@ -65,8 +68,9 @@ export const contratosSchema = z.object({
   objeto: contratoFields.objeto, // RK-879233539305 RK-ee6cd831c2d4 (aplicada em contratoFields)
   departamentoId: requiredInt("Informe o departamento(unidade gestora)"), // RK-a0660a4fb262
   prestadorServicoId: requiredInt("Informe o fornecedor"), // RK-37f294a3dc8e
-  pessoaFisicaId: optionalString(),
-  suplenteId: optionalString(),
+  // CPF do gestor/suplente (022-pessoas-fornecedores, D5): com ou sem máscara, gravado com 11 dígitos.
+  pessoaFisicaId: optionalCpf("Gestor"),
+  suplenteId: optionalCpf("Gestor suplente"),
   dataInicio: requiredDate("Informe a data de início"), // RK-6b2806cfff8d
   dataTermino: requiredDate("Informe a data de vencimento"), // RK-9d6599f5897d
   valorMensal: moneyInput("Valor mensal"),
@@ -125,6 +129,35 @@ async function prepareAnexos(raw: RawBody, files: UploadSession): Promise<RawBod
   return out;
 }
 
+/** Mensagens da conferência das referências (022-pessoas-fornecedores, D5; não vêm do legado). */
+export const MSG_GESTOR_NAO_ENCONTRADO = "Gestor não encontrado em pessoas físicas";
+export const MSG_SUPLENTE_NAO_ENCONTRADO = "Gestor suplente não encontrado em pessoas físicas";
+export const MSG_FORNECEDOR_NAO_ENCONTRADO = "Fornecedor não encontrado";
+
+/**
+ * Confere gestor, suplente e fornecedor na referência (022, D5). O CPF só é conferido na criação ou
+ * quando muda: o CPF órfão de um contrato do legado não bloqueia a edição de outro campo. O DV não
+ * é conferido (D9): existir em `pessoas_fisicas` é a garantia.
+ */
+async function conferirReferencias(data: Record<string, unknown>, current: Record<string, unknown> | undefined) {
+  const errors: Record<string, string> = {};
+  const cpfs = [
+    ["pessoaFisicaId", MSG_GESTOR_NAO_ENCONTRADO],
+    ["suplenteId", MSG_SUPLENTE_NAO_ENCONTRADO],
+  ] as const;
+  const conferir = cpfs.filter(([campo]) => typeof data[campo] === "string" && (!current || current[campo] !== data[campo]));
+  if (conferir.length) {
+    const achadas = await pessoasPorCpf(conferir.map(([campo]) => data[campo] as string));
+    for (const [campo, msg] of conferir) if (!achadas.has(data[campo] as string)) errors[campo] = msg;
+  }
+  // RK-37f294a3dc8e (obrigatório) fica no schema; aqui só a existência, em vez de o FK estourar.
+  if (typeof data.prestadorServicoId === "number") {
+    const existe = await prisma.prestadorServico.findUnique({ where: { id: data.prestadorServicoId }, select: { id: true } });
+    if (!existe) errors.prestadorServicoId = MSG_FORNECEDOR_NAO_ENCONTRADO;
+  }
+  if (Object.keys(errors).length) throw new FieldRuleError(errors);
+}
+
 type ContratoArgs = { data: Record<string, unknown>; include?: object };
 
 /**
@@ -162,7 +195,7 @@ const contratoDelegate = (db: Db = prisma) => ({
 
 export const contratoInclude = {
   departamento: { select: { id: true, deDepartamento: true } },
-  prestadorServico: { select: { id: true, deRazaoSocial: true } },
+  prestadorServico: { select: { id: true, deRazaoSocial: true, cnpj: true } },
   situacaoContratual: { select: { id: true, descricao: true } },
   tipoContrato: { select: { id: true, nome: true } },
   modalidade: { select: { id: true, nome: true } },
@@ -178,7 +211,8 @@ const crud = crudHandlers({
   listWhere: (params) => contratosWhere(params),
   sortFields: ["dataTermino", "numeroContrato", "valorTotal"],
   prepare: (raw, ctx) => prepareAnexos(raw, ctx.files),
-  beforeSave: (data, { mode, current }) => {
+  beforeSave: async (data, { mode, current }) => {
+    await conferirReferencias(data, mode === "update" ? (current as Record<string, unknown>) : undefined);
     convertMoney(data);
     const parentId = mode === "update" ? ((current as { parentId: number | null } | undefined)?.parentId ?? null) : null;
     // RK-c3fbde6dbf4a — contrato original (sem parentId): valorInicial = valorTotal.
@@ -208,7 +242,8 @@ export function contratosWhere(params: URLSearchParams, now = new Date()): Prism
     const id = positiveInt(params.get(key));
     if (id) and.push({ [key]: id });
   }
-  const gestor = (params.get("gestor") ?? "").trim();
+  // CPF do gestor ou suplente, com ou sem máscara (022-pessoas-fornecedores, D11).
+  const gestor = onlyDigits(params.get("gestor"));
   if (gestor) and.push({ OR: [{ pessoaFisicaId: gestor }, { suplenteId: gestor }] });
   const vencendo = params.get("vencendoEm");
   if (vencendo && /^\d+$/.test(vencendo)) {
@@ -301,6 +336,22 @@ export const contratosApi = {
   createAditivo,
 };
 
+/**
+ * Rótulo do gestor/suplente no detalhe (022, D10): "Nome — 529.982.247-25"; CPF sem pessoa →
+ * "390.533.447-05 (não encontrado em pessoas físicas)"; sem valor → `null`.
+ */
+export function rotuloPessoa(cpf: string | null, pessoas: Map<string, { deNome: string | null }>): string | null {
+  if (!cpf) return null;
+  const pessoa = pessoas.get(onlyDigits(cpf));
+  if (!pessoa) return `${formatCpf(cpf)} (não encontrado em pessoas físicas)`;
+  return `${pessoa.deNome ?? "Sem nome"} — ${formatCpf(cpf)}`;
+}
+
+/** Rótulo do fornecedor no detalhe (022, D10): "Razão social — 11.222.333/0001-81". */
+export function rotuloFornecedor(p: { deRazaoSocial: string; cnpj: string | null }): string {
+  return p.cnpj ? `${p.deRazaoSocial} — ${formatCnpj(p.cnpj)}` : p.deRazaoSocial;
+}
+
 /** Dados da página de detalhe (`/contratos/[id]`): contrato, original (se aditivo), aditivos e anexos. */
 export async function getContratoDetalhe(id: number) {
   const contrato = await prisma.contrato.findUnique({
@@ -312,15 +363,17 @@ export async function getContratoDetalhe(id: number) {
     },
   });
   if (!contrato) return null;
-  const ids = [contrato.pessoaFisicaId, contrato.suplenteId].map((v) => (v && /^\d+$/.test(v) ? Number(v) : null));
   const [pessoas, publicacoes, fiscais] = await Promise.all([
-    prisma.pessoaFisica.findMany({
-      where: { idPessoaFisica: { in: ids.filter((v): v is number => v !== null) } },
-      select: { idPessoaFisica: true, deNome: true },
-    }),
+    pessoasPorCpf([contrato.pessoaFisicaId, contrato.suplenteId]),
     prisma.anexoPublicacao.findMany({ where: { contratoId: id }, orderBy: { id: "asc" } }),
     prisma.anexoFiscal.findMany({ where: { contratoId: id }, orderBy: { id: "asc" } }),
   ]);
-  const nome = (v: number | null) => (v === null ? null : (pessoas.find((p) => p.idPessoaFisica === v)?.deNome ?? null));
-  return { contrato, gestor: nome(ids[0]), suplente: nome(ids[1]), publicacoes, fiscais };
+  return {
+    contrato,
+    gestor: rotuloPessoa(contrato.pessoaFisicaId, pessoas),
+    suplente: rotuloPessoa(contrato.suplenteId, pessoas),
+    fornecedor: contrato.prestadorServico ? rotuloFornecedor(contrato.prestadorServico) : null,
+    publicacoes,
+    fiscais,
+  };
 }

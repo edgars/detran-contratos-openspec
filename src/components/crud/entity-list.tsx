@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { formatCell, readPath } from "./format-cell";
 import { OptionSelect } from "./option-select";
+import { RemoteLookup } from "./remote-lookup";
 import { useLookupOptions } from "./use-options";
 import { ariaSort, formatSort, nextSort, parseSort, withSortParam, type SortState } from "./sort";
 import type { ColumnDef, ListFilter } from "./types";
@@ -34,6 +35,17 @@ function FilterControl({ filter, value, onChange }: { filter: ListFilter; value:
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
       />
+    );
+  }
+  if (filter.kind === "search" && filter.lookup) {
+    // Busca remota (022-pessoas-fornecedores, D6): o filtro recebe o valor gravado (CPF, id).
+    return (
+      <div className="min-w-0 sm:w-64">
+        <label htmlFor={id} className="sr-only">
+          {filter.label}
+        </label>
+        <RemoteLookup id={id} value={value} lookup={filter.lookup} onChange={onChange} placeholder={filter.label} allowClear />
+      </div>
     );
   }
   return (
@@ -123,6 +135,12 @@ export function EntityList({
   const size = pageSize;
   // Chave estável: um objeto literal novo a cada render não dispara outra carga.
   const extraKey = JSON.stringify(extraParams ?? {});
+  // Parâmetros fixos mudaram (ex.: aba Pendentes/Realizadas): volta para a página 1.
+  const [prevExtraKey, setPrevExtraKey] = useState(extraKey);
+  if (prevExtraKey !== extraKey) {
+    setPrevExtraKey(extraKey);
+    setPage(1);
+  }
 
   // A ordenação escolhida fica na URL da página (`?sort=campo:asc`): lida ao abrir.
   useEffect(() => {

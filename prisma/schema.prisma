@@ -25,6 +25,8 @@ model Diretoria {
 model PessoaFisica {
   id                     Int       @id @default(autoincrement())
   idPessoaFisica         Int
+  /// CPF com 11 dígitos, sem pontuação (chave do legado `PessoaFisica.CPF`; 022-pessoas-fornecedores).
+  cpf                    String?   @unique
   deNome                 String?
   deEndereco             String?
   deBairro               String?
@@ -99,6 +101,8 @@ model Pessoa {
 model PrestadorServico {
   id            Int        @id @default(autoincrement())
   deRazaoSocial String
+  /// CNPJ com 14 dígitos, sem pontuação (chave do legado `PrestadorServico.CNPJ`; 022-pessoas-fornecedores).
+  cnpj          String?    @unique
   contratos     Contrato[]
 
   @@map("prestadores_servicos")
@@ -358,4 +362,20 @@ model Contrato {
   numeroFiscais        String?
 
   @@map("contratos")
+}
+
+/// Valores antigos que uma migração não conseguiu converter (022-pessoas-fornecedores, D7); a 025 pode reaproveitar.
+model MigracaoPendencia {
+  id          Int       @id @default(autoincrement())
+  origem      String
+  tabela      String
+  registroId  Int
+  campo       String
+  valorAntigo String?
+  motivo      String
+  criadoEm    DateTime  @default(now())
+  resolvidoEm DateTime?
+
+  @@index([origem, resolvidoEm])
+  @@map("migracao_pendencias")
 }

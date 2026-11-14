@@ -153,3 +153,16 @@ Gerada com `npx prisma migrate dev --create-only --name 022_pessoas_fornecedores
 - **Ordem de aplicação** — `019` e `020` são numeradas antes desta e dependem dela; o `config.yaml` manda aplicar em ordem numérica. O autor precisa confirmar a ordem 022 → 020 → 019 (como a `019-relatorios/proposal.md` já indica) ou renumerar.
 - **Pessoa excluída** — o fiscal/gestor deve poder ser escolhido se `pessoas_fisicas.dtExcluido` estiver preenchido? Hoje a busca não filtra por `dtExcluido`; confirmar no legado (`getSourceFile` do controller de contratos).
 - **`pessoas.cpf`/`pessoas.cnpj`** — a tabela `pessoas` tem documentos mas nenhuma ligação rastreada com `pessoas_fisicas` ou `prestadores_servicos`; não é usada aqui.
+
+### Decisões tomadas na aplicação (14/11/2026)
+
+- **Migração gerada sem `migrate dev`.** O `prisma migrate dev --create-only` recusa ambiente não interativo; o DDL de `20261114024443_022_pessoas_fornecedores/migration.sql` saiu de `prisma migrate diff --from-url <banco com as migrações anteriores> --to-schema-datamodel` e o SQL de dados (D7 passos 2 e 3) foi acrescentado à mão no mesmo arquivo. `pessoaFisicaId`/`suplenteId` vazios (`''`) também são zerados, mas sem pendência (não há valor antigo a guardar).
+- **Mensagem de CPF incompleto em Contratos.** A spec só exige `400` no campo; foi usada a mensagem de D5, `"<rótulo>: CPF deve ter 11 dígitos"` ("Gestor: …", "Gestor suplente: …").
+- **Filtro exato com valor que não serve** (`cpf` sem 11 dígitos, `cnpj` sem 14, `id` não numérico) não casa com nenhuma linha (lista vazia), em vez de ser ignorado: quem pede um valor exato não deve receber a lista inteira.
+- **`q` em `/api/fiscais`** também procura os dígitos de um texto mascarado (`searchTerms`), já que o CPF passou a ser gravado sem máscara.
+- **Rótulo do campo em Fiscais**: "Fiscal" (o campo agora escolhe a pessoa por nome ou CPF); a mensagem de obrigatório continua "Pessoa Física CPF é obrigatório".
+- **Cenário *Nenhuma escrita em pessoas físicas e fornecedores*.** O `405` é do roteador do Next.js para método não exportado; o teste unitário confere que as rotas só exportam `GET` e que nada é gravado, e o `405` foi conferido à mão no servidor de desenvolvimento (`POST`/`PUT`/`DELETE` com sessão → `405`).
+- **Cenários de UI (*Digitar parte do nome*, *Mais resultados do que cabem*, *Abrir uma edição*)** são testados no núcleo sem React do componente (`src/components/crud/remote-search.ts`: pausa, cancelamento, URL, rótulos, aviso e resolução do valor gravado), porque a suíte roda em `node` sem DOM; o componente foi conferido nas telas.
+- **Valor gravado que a referência não acha** aparece no campo como "<documento formatado> (não encontrado)" (D6); no detalhe do contrato, como "(não encontrado em pessoas físicas)" (D10).
+- **`detailFormat` sem documento**: a opção mostra "<nome> — sem CPF" / "— sem CNPJ" (ex.: fornecedores de desenvolvimento cadastrados antes da 022).
+
