@@ -8,4 +8,6 @@ export const MSG = {
   nomeTipoContrato: "Por favor,Preencher o campo NOME !",
   nomeGrupo: "Informe o nome do grupo!",
   obrigatorio: (campo: string) => `${campo} é obrigatório`,
+  /** Limite de tamanho das telas do legado (020-contratos-complementos; sem RK). */
+  maximo: (campo: string, n: number) => `${campo} deve ter no máximo ${n} caracteres`,
 } as const;

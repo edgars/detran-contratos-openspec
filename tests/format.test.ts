@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatDate, parseCurrency, parseDate } from "@/lib/format";
+import { formatCnpj, formatCpf, formatCurrency, formatDate, parseCurrency, parseDate } from "@/lib/format";
 
 // Spec locale-and-formats › "Uma data e um valor são exibidos"
 describe("locale pt-BR", () => {
@@ -28,5 +28,16 @@ describe("locale pt-BR", () => {
     expect(parseCurrency("R$ 10")).toBe("10.00");
     expect(parseCurrency("12,5")).toBe("12.50");
     expect(parseCurrency("1,234.56")).toBeNull();
+  });
+
+  // 022-pessoas-fornecedores › app-shell › "Exibir documentos"
+  it("Exibir documentos: cpf 52998224725 → 529.982.247-25 e cnpj 11222333000181 → 11.222.333/0001-81", () => {
+    expect(formatCpf("52998224725")).toBe("529.982.247-25");
+    expect(formatCnpj("11222333000181")).toBe("11.222.333/0001-81");
+    // Com ou sem máscara; vazio vira "".
+    expect(formatCpf("529.982.247-25")).toBe("529.982.247-25");
+    expect(formatCnpj("11.222.333/0001-81")).toBe("11.222.333/0001-81");
+    expect(formatCpf(null)).toBe("");
+    expect(formatCnpj("")).toBe("");
   });
 });

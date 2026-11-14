@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/db";
 import type { AttachmentRule } from "@/lib/rules/attachments";
 
 /** Pasta dos anexos, fora de `public/`. */
@@ -13,7 +14,15 @@ export function uploadMaxBytes(): number {
   return (Number.isFinite(mb) && mb > 0 ? mb : 10) * 1024 * 1024;
 }
 
-export class UploadError extends Error {}
+/** Upload recusado. `field` é o campo do anexo: o kit responde `400 { errors: { [field]: message } }`. */
+export class UploadError extends Error {
+  constructor(
+    message: string,
+    public readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 const STORED_NAME = /^[0-9a-f-]{36}\.pdf$/;
 
@@ -43,5 +52,79 @@ export async function readStoredPdf(name: string): Promise<Buffer | null> {
     return await readFile(join(uploadDir(), name));
   } catch {
     return null;
+  }
+}
+
+/** Apaga um anexo gravado. Nome fora do padrão de `savePdf` é ignorado; arquivo inexistente não é erro. */
+export async function deleteStoredPdf(name: string): Promise<void> {
+  if (!STORED_NAME.test(name)) return;
+  try {
+    await unlink(join(uploadDir(), name));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+/**
+ * Nome ainda referenciado por alguma coluna de anexo (`contratos.anexo`, `contratos.projetoBasico`, `anexos_fiscais.anexo`,
+ * `anexos_publicacao.anexo`, `penalidades.arquivo`): `commit()` não o apaga.
+ */
+async function isReferenced(name: string): Promise<boolean> {
+  const counts = await Promise.all([
+    prisma.contrato.count({ where: { OR: [{ anexo: name }, { projetoBasico: name }] } }),
+    prisma.anexoFiscal.count({ where: { anexo: name } }),
+    prisma.anexoPublicacao.count({ where: { anexo: name } }),
+    prisma.penalidade.count({ where: { arquivo: name } }),
+  ]);
+  return counts.some((n) => n > 0);
+}
+
+/** Falha ao apagar não desfaz a gravação: só registra o nome (nunca o conteúdo). */
+async function removeQuietly(name: string) {
+  try {
+    await deleteStoredPdf(name);
+  } catch {
+    console.warn(`Não foi possível apagar o anexo ${name}`);
+  }
+}
+
+/**
+ * Registro de arquivos de uma requisição (024-kit-robustez › design.md › "Registro de arquivos da
+ * requisição"). `save` grava via `savePdf` e lembra o nome; `rollback` apaga os gravados quando a
+ * gravação no banco não termina; `discard` agenda o arquivo substituído ou do registro excluído,
+ * apagado só no `commit`, depois que o banco confirmou.
+ */
+export class UploadSession {
+  readonly saved: string[] = [];
+  readonly replaced: string[] = [];
+
+  async save(field: string, file: unknown, rule: AttachmentRule): Promise<string> {
+    try {
+      const name = await savePdf(file, rule);
+      this.saved.push(name);
+      return name;
+    } catch (error) {
+      if (error instanceof UploadError) throw new UploadError(error.message, field);
+      throw error;
+    }
+  }
+
+  discard(name: string | null | undefined): void {
+    if (typeof name === "string" && STORED_NAME.test(name) && !this.replaced.includes(name)) this.replaced.push(name);
+  }
+
+  async rollback(): Promise<void> {
+    const names = this.saved.splice(0);
+    this.replaced.splice(0);
+    await Promise.all(names.map(removeQuietly));
+  }
+
+  async commit(): Promise<void> {
+    const names = this.replaced.splice(0);
+    this.saved.splice(0);
+    for (const name of names) {
+      if (await isReferenced(name)) continue;
+      await removeQuietly(name);
+    }
   }
 }

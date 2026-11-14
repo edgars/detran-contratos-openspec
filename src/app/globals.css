@@ -183,3 +183,123 @@
 @utility numeric {
   font-variant-numeric: tabular-nums lining-nums;
 }
+/*
+ * Impressão (019-relatorios): folha genérica para qualquer página do app (relatórios, página do
+ * contrato…). Só o conteúdo sai no papel: sem menu lateral, sem cabeçalho do app (`print:hidden` no
+ * layout), sem avisos flutuantes; fundo branco, texto preto, sem sombras; tabelas que repetem o
+ * cabeçalho em cada página e não partem uma linha ao meio. Componentes de tela (filtros, botões)
+ * saem com `print:hidden`; blocos só de papel entram com `hidden print:block`.
+ * A orientação (A4 paisagem) é declarada pela página que precisa, com `@page` próprio.
+ */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* Tema escuro não vai para o papel: tokens claros durante a impressão. */
+  .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.4 0 0);
+    --border: oklch(0.85 0 0);
+    --primary: oklch(0.47 0.135 256);
+  }
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-rail"],
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  [data-slot="sidebar-wrapper"],
+  [data-slot="sidebar-inset"] {
+    display: block !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+  /* O contêiner do conteúdo não precisa do respiro de tela: a margem é a do @page. */
+  [data-slot="sidebar-inset"] > div {
+    padding: 0 !important;
+  }
+  *,
+  ::before,
+  ::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  /* Contêineres com rolagem horizontal não cortam a tabela no papel. */
+  [data-slot="table-container"],
+  .overflow-x-auto,
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-row-group;
+  }
+  tr,
+  img {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Relatórios: tabela compacta em 9pt, linhas finas, sem fundos. */
+  [data-print="relatorio"] {
+    font-size: 9pt;
+  }
+  [data-print="relatorio"] table {
+    font-size: 9pt;
+    min-width: 0 !important;
+  }
+  [data-print="relatorio"] th,
+  [data-print="relatorio"] td {
+    height: auto !important;
+    padding: 3px 5px !important;
+    white-space: normal !important;
+    border-bottom: 0.5pt solid #999;
+    background: transparent !important;
+    color: #000 !important;
+  }
+  /* Valores, datas e números não quebram no meio. */
+  [data-print="relatorio"] th.tabular-nums,
+  [data-print="relatorio"] td.tabular-nums {
+    white-space: nowrap !important;
+  }
+  [data-print="relatorio"] thead th {
+    border-bottom: 1pt solid #000;
+    font-weight: 600;
+  }
+  [data-print="relatorio"] .truncate {
+    overflow: visible !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    max-width: none !important;
+  }
+}

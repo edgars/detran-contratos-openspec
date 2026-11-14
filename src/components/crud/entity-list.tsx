@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, RotateCw, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Plus, RotateCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -12,7 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { formatCell, readPath } from "./format-cell";
 import { OptionSelect } from "./option-select";
+import { RemoteLookup } from "./remote-lookup";
 import { useLookupOptions } from "./use-options";
+import { ariaSort, formatSort, nextSort, parseSort, withSortParam, type SortState } from "./sort";
 import type { ColumnDef, ListFilter } from "./types";
 
 type Page = { items: Record<string, unknown>[]; total: number; page: number; size: number };
@@ -33,6 +35,17 @@ function FilterControl({ filter, value, onChange }: { filter: ListFilter; value:
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
       />
+    );
+  }
+  if (filter.kind === "search" && filter.lookup) {
+    // Busca remota (022-pessoas-fornecedores, D6): o filtro recebe o valor gravado (CPF, id).
+    return (
+      <div className="min-w-0 sm:w-64">
+        <label htmlFor={id} className="sr-only">
+          {filter.label}
+        </label>
+        <RemoteLookup id={id} value={value} lookup={filter.lookup} onChange={onChange} placeholder={filter.label} allowClear />
+      </div>
     );
   }
   return (
@@ -58,6 +71,31 @@ function columnClass(c: ColumnDef) {
   return cn(right && "text-right", (c.format === "date" || c.format === "currency" || right) && "tabular-nums", c.secondary && "hidden md:table-cell");
 }
 
+/** Cabeçalho de coluna ordenável: botão ghost com o ícone da direção atual. */
+function SortHeader({ column, sort, onSort }: { column: ColumnDef; sort: SortState; onSort: () => void }) {
+  const state = ariaSort(sort, column.key);
+  const Icon = state === "ascending" ? ArrowUp : state === "descending" ? ArrowDown : ArrowUpDown;
+  const right = columnClass(column).includes("text-right");
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onSort}
+      className={cn(
+        "-mx-2 h-7 gap-1 px-2 text-xs font-medium",
+        state === "none" ? "text-muted-foreground" : "text-foreground",
+        right && "flex-row-reverse",
+      )}
+    >
+      {column.label}
+      <Icon aria-hidden="true" className={cn("size-3.5", state === "none" && "opacity-50")} />
+    </Button>
+  );
+}
+
+type ExtraParams = Record<string, string | number | boolean | null | undefined>;
+
 /** Lista paginada com busca, filtros e botão Novo (convenção de toda entidade gerenciada). */
 export function EntityList({
   title,
@@ -68,6 +106,8 @@ export function EntityList({
   searchPlaceholder = "Buscar",
   canCreate = true,
   rowHref,
+  pageSize = 20,
+  extraParams,
 }: {
   title: string;
   api: string;
@@ -78,6 +118,10 @@ export function EntityList({
   canCreate?: boolean;
   /** Destino do link da 1ª coluna (padrão: `${basePath}/<id>/edit`). Use `{id}` como marcador. */
   rowHref?: string;
+  /** Itens por página (padrão 20; a API limita a 100). */
+  pageSize?: number;
+  /** Parâmetros fixos somados à query da lista (ex.: `{ contratoId: 3 }`). Não aparecem como filtro. */
+  extraParams?: ExtraParams;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -86,14 +130,40 @@ export function EntityList({
   const [data, setData] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [sort, setSort] = useState<SortState>(null);
   const request = useRef(0);
-  const size = 20;
+  const size = pageSize;
+  // Chave estável: um objeto literal novo a cada render não dispara outra carga.
+  const extraKey = JSON.stringify(extraParams ?? {});
+  // Parâmetros fixos mudaram (ex.: aba Pendentes/Realizadas): volta para a página 1.
+  const [prevExtraKey, setPrevExtraKey] = useState(extraKey);
+  if (prevExtraKey !== extraKey) {
+    setPrevExtraKey(extraKey);
+    setPage(1);
+  }
+
+  // A ordenação escolhida fica na URL da página (`?sort=campo:asc`): lida ao abrir.
+  useEffect(() => {
+    const initial = parseSort(new URLSearchParams(window.location.search).get("sort"));
+    if (initial && columns.some((c) => c.sortable && c.key === initial.field)) setSort(initial);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changeSort = (field: string) => {
+    const next = nextSort(sort, field);
+    setSort(next);
+    setPage(1);
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${withSortParam(window.location.search, next)}`);
+  };
 
   const load = useCallback(async () => {
     const current = ++request.current;
     const params = new URLSearchParams({ page: String(page), size: String(size) });
+    for (const [k, v] of Object.entries(JSON.parse(extraKey) as ExtraParams)) {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    }
     if (q) params.set("q", q);
     for (const [k, v] of Object.entries(values)) if (v) params.set(k, v);
+    if (sort) params.set("sort", formatSort(sort));
     setLoading(true);
     try {
       const res = await fetch(`${api}?${params}`);
@@ -108,7 +178,7 @@ export function EntityList({
     } finally {
       if (current === request.current) setLoading(false);
     }
-  }, [api, page, q, values]);
+  }, [api, page, q, values, sort, size, extraKey]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -191,8 +261,12 @@ export function EntityList({
           <TableHeader className="bg-muted/50">
             <TableRow className="hover:bg-transparent">
               {columns.map((c) => (
-                <TableHead key={c.key} className={cn("h-9 px-3 text-xs font-medium text-muted-foreground", columnClass(c))}>
-                  {c.label}
+                <TableHead
+                  key={c.key}
+                  aria-sort={c.sortable ? ariaSort(sort, c.key) : undefined}
+                  className={cn("h-9 px-3 text-xs font-medium text-muted-foreground", columnClass(c))}
+                >
+                  {c.sortable ? <SortHeader column={c} sort={sort} onSort={() => changeSort(c.key)} /> : c.label}
                 </TableHead>
               ))}
             </TableRow>

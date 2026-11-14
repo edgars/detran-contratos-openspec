@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Banknote, FilePlus2, Gavel } from "lucide-react";
-import { prisma } from "@/lib/db";
+import { contratosVencendoAte, type ContratoVencendo } from "@/lib/entities/contratos.server";
 import { getSessionUser } from "@/lib/auth/session";
+import { can } from "@/lib/auth/permissions";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,51 +14,7 @@ const JANELA_VENCENDO = 30;
 const JANELA_VENCIDOS = 90;
 const LIMITE = 10;
 
-type Linha = {
-  id: number;
-  numeroContrato: string | null;
-  objeto: string;
-  fornecedor: string | null;
-  vencimento: Date;
-  dias: number;
-  valorTotal: { toString(): string } | null;
-};
-
-/**
- * Contratos originais cujo fim de vigência (o maior vencimento entre o contrato e seus aditivos)
- * cai até `limite`. Um contrato prorrogado por aditivo só conta pela data do aditivo.
- */
-async function contratosAte(limite: Date, hoje: number): Promise<Linha[]> {
-  const contratos = await prisma.contrato.findMany({
-    where: { parentId: null, dataTermino: { lte: limite } },
-    select: {
-      id: true,
-      numeroContrato: true,
-      objeto: true,
-      dataTermino: true,
-      valorTotal: true,
-      prestadorServico: { select: { deRazaoSocial: true } },
-      aditivos: { select: { dataTermino: true } },
-    },
-  });
-  return contratos.flatMap((c) => {
-    const datas = [c.dataTermino, ...c.aditivos.map((a) => a.dataTermino)].filter((d): d is Date => d != null);
-    if (datas.length === 0) return [];
-    const vencimento = new Date(Math.max(...datas.map((d) => d.getTime())));
-    if (vencimento > limite) return [];
-    return [
-      {
-        id: c.id,
-        numeroContrato: c.numeroContrato,
-        objeto: c.objeto,
-        fornecedor: c.prestadorServico?.deRazaoSocial ?? null,
-        vencimento,
-        dias: Math.round((vencimento.getTime() - hoje) / DAY),
-        valorTotal: c.valorTotal,
-      },
-    ];
-  });
-}
+type Linha = ContratoVencendo;
 
 function saudacao(hora: number) {
   if (hora < 12) return "Bom dia";
@@ -78,11 +35,17 @@ export default async function Home() {
   const now = new Date();
   // Vencimentos são gravados à meia-noite UTC do dia: compara pelo dia do servidor (como a lista).
   const hoje = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const linhas = await contratosAte(new Date(hoje + JANELA_VENCENDO * DAY), hoje);
+  // Vigência só pela data do próprio contrato (diretiva do autor 13/11/2026).
+  // 023-perfis-acesso: o painel só lista contratos para quem pode listá-los; atalhos conforme `criar`.
+  const verContratos = can(user, "contratos", "listar");
+  const atalhos = {
+    contrato: can(user, "contratos", "criar"),
+    pagamento: can(user, "pagamentos", "criar"),
+    penalidade: can(user, "penalidades", "criar"),
+  };
+  const linhas = verContratos ? await contratosVencendoAte(new Date(hoje + JANELA_VENCENDO * DAY), hoje) : [];
   const vencendo = linhas.filter((l) => l.dias >= 0).sort((a, b) => a.dias - b.dias);
-  const vencidos = linhas
-    .filter((l) => l.dias < 0 && l.dias >= -JANELA_VENCIDOS)
-    .sort((a, b) => b.dias - a.dias);
+  const vencidos = linhas.filter((l) => l.dias < 0 && l.dias >= -JANELA_VENCIDOS).sort((a, b) => b.dias - a.dias);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
@@ -94,46 +57,60 @@ export default async function Home() {
           </h1>
           <p className="text-sm text-muted-foreground">
             Hoje é <span className="tabular-nums">{formatDate(new Date(hoje))}</span>.{" "}
-            {vencendo.length === 0
-              ? "Nenhum contrato vence nos próximos 30 dias."
-              : vencendo.length === 1
-                ? "1 contrato vence nos próximos 30 dias."
-                : `${vencendo.length} contratos vencem nos próximos 30 dias.`}
+            {!verContratos
+              ? "Use o menu ao lado para abrir o que o seu perfil permite."
+              : vencendo.length === 0
+                ? "Nenhum contrato vence nos próximos 30 dias."
+                : vencendo.length === 1
+                  ? "1 contrato vence nos próximos 30 dias."
+                  : `${vencendo.length} contratos vencem nos próximos 30 dias.`}
           </p>
         </div>
-        <nav aria-label="Atalhos" className="flex flex-wrap gap-2">
-          <Link href="/contratos/new" className={cn(buttonVariants())}>
-            <FilePlus2 aria-hidden />
-            Novo contrato
-          </Link>
-          <Link href="/pagamentos/new" className={cn(buttonVariants({ variant: "outline" }))}>
-            <Banknote aria-hidden />
-            Novo pagamento
-          </Link>
-          <Link href="/penalidades/new" className={cn(buttonVariants({ variant: "outline" }))}>
-            <Gavel aria-hidden />
-            Registrar penalidade
-          </Link>
-        </nav>
+        {(atalhos.contrato || atalhos.pagamento || atalhos.penalidade) && (
+          <nav aria-label="Atalhos" className="flex flex-wrap gap-2">
+            {atalhos.contrato && (
+              <Link href="/contratos/new" className={cn(buttonVariants())}>
+                <FilePlus2 aria-hidden />
+                Novo contrato
+              </Link>
+            )}
+            {atalhos.pagamento && (
+              <Link href="/pagamentos/new" className={cn(buttonVariants({ variant: atalhos.contrato ? "outline" : "default" }))}>
+                <Banknote aria-hidden />
+                Novo pagamento
+              </Link>
+            )}
+            {atalhos.penalidade && (
+              <Link href="/penalidades/new" className={cn(buttonVariants({ variant: "outline" }))}>
+                <Gavel aria-hidden />
+                Registrar penalidade
+              </Link>
+            )}
+          </nav>
+        )}
       </header>
 
-      <Secao
-        id="vencendo"
-        titulo="Vencendo nos próximos 30 dias"
-        descricao="Contratos cujo fim de vigência, já considerando aditivos, cai nos próximos 30 dias."
-        linhas={vencendo}
-        vazio="Nenhum contrato vence nos próximos 30 dias."
-        tom="vencendo"
-        link
-      />
-      <Secao
-        id="vencidos"
-        titulo="Vencidos"
-        descricao={`Vigência encerrada nos últimos ${JANELA_VENCIDOS} dias, sem aditivo que a prorrogue.`}
-        linhas={vencidos}
-        vazio={`Nenhum contrato venceu nos últimos ${JANELA_VENCIDOS} dias.`}
-        tom="vencido"
-      />
+      {verContratos && (
+        <>
+          <Secao
+            id="vencendo"
+            titulo="Vencendo nos próximos 30 dias"
+            descricao="Contratos cujo vencimento (data do próprio contrato) cai nos próximos 30 dias."
+            linhas={vencendo}
+            vazio="Nenhum contrato vence nos próximos 30 dias."
+            tom="vencendo"
+            link
+          />
+          <Secao
+            id="vencidos"
+            titulo="Vencidos"
+            descricao={`Vencimento nos últimos ${JANELA_VENCIDOS} dias.`}
+            linhas={vencidos}
+            vazio={`Nenhum contrato venceu nos últimos ${JANELA_VENCIDOS} dias.`}
+            tom="vencido"
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -167,10 +144,7 @@ function Secao({
           <p className="text-sm text-muted-foreground">{descricao}</p>
         </div>
         {link && (
-          <Link
-            href="/contratos"
-            className="shrink-0 rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
+          <Link href="/contratos" className="shrink-0 rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline">
             Ver todos os contratos
           </Link>
         )}
@@ -183,12 +157,24 @@ function Secao({
           <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/50 text-left text-xs whitespace-nowrap text-muted-foreground">
               <tr>
-                <th scope="col" className="h-9 px-3 font-medium">Nº do contrato</th>
-                <th scope="col" className="h-9 px-3 font-medium">Objeto</th>
-                <th scope="col" className="hidden h-9 px-3 font-medium lg:table-cell">Fornecedor</th>
-                <th scope="col" className="h-9 px-3 font-medium">Vencimento</th>
-                <th scope="col" className="h-9 px-3 font-medium">Prazo</th>
-                <th scope="col" className="h-9 px-3 text-right font-medium">Valor total</th>
+                <th scope="col" className="h-9 px-3 font-medium">
+                  Nº do contrato
+                </th>
+                <th scope="col" className="h-9 px-3 font-medium">
+                  Objeto
+                </th>
+                <th scope="col" className="hidden h-9 px-3 font-medium lg:table-cell">
+                  Fornecedor
+                </th>
+                <th scope="col" className="h-9 px-3 font-medium">
+                  Vencimento
+                </th>
+                <th scope="col" className="h-9 px-3 font-medium">
+                  Prazo
+                </th>
+                <th scope="col" className="h-9 px-3 text-right font-medium">
+                  Valor total
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -205,9 +191,7 @@ function Secao({
                   <td className="max-w-80 truncate px-3 py-2.5" title={l.objeto}>
                     {l.objeto}
                   </td>
-                  <td className="hidden max-w-64 truncate px-3 py-2.5 text-muted-foreground lg:table-cell">
-                    {l.fornecedor ?? "—"}
-                  </td>
+                  <td className="hidden max-w-64 truncate px-3 py-2.5 text-muted-foreground lg:table-cell">{l.fornecedor ?? "—"}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">{formatDate(l.vencimento)}</td>
                   <td
                     className={cn(
@@ -217,9 +201,7 @@ function Secao({
                   >
                     {prazo(l.dias)}
                   </td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
-                    {formatCurrency(l.valorTotal) || "—"}
-                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">{formatCurrency(l.valorTotal) || "—"}</td>
                 </tr>
               ))}
             </tbody>

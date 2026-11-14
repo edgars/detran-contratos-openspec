@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCnpj, formatCpf, formatCurrency, formatDate } from "@/lib/format";
 import type { ColumnDef } from "./types";
 
 export function readPath(row: Record<string, unknown>, path: string): unknown {
@@ -20,7 +20,7 @@ const isTrue = (value: unknown) => value === "S" || value === 1 || value === tru
 
 export function formatCell(row: Record<string, unknown>, column: ColumnDef): React.ReactNode {
   const value = readPath(row, column.path ?? column.key);
-  if (value === null || value === undefined || value === "") return <Empty />;
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) return <Empty />;
   switch (column.format) {
     case "date": {
       const text = formatDate(value as string);
@@ -29,6 +29,11 @@ export function formatCell(row: Record<string, unknown>, column: ColumnDef): Rea
     case "currency": {
       const text = formatCurrency(value as string);
       return text ? <span className="tabular-nums">{text}</span> : <Empty />;
+    }
+    case "cpf":
+    case "cnpj": {
+      const text = column.format === "cpf" ? formatCpf(String(value)) : formatCnpj(String(value));
+      return text ? <span className="tabular-nums whitespace-nowrap">{text}</span> : <Empty />;
     }
     case "boolean":
       return isTrue(value) ? (
@@ -49,6 +54,10 @@ export function formatCell(row: Record<string, unknown>, column: ColumnDef): Rea
           <span className="sr-only"> (abre em nova aba)</span>
         </a>
       );
+    case "options": {
+      const lista = Array.isArray(value) ? value : [value];
+      return lista.map((v) => column.options?.find((o) => o.value === String(v))?.label ?? String(v)).join(", ");
+    }
     default:
       return String(value);
   }

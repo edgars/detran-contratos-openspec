@@ -4,6 +4,7 @@
  */
 export const MASKS = {
   cpf: "###.###.###-##",
+  cnpj: "##.###.###/####-##",
   cep: "#####-###",
 } as const;
 

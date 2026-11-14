@@ -73,14 +73,15 @@ describe("013-anexos-fiscais", () => {
     expect((await novo.json()).anexo).toMatch(/^[0-9a-f-]{36}\.pdf$/);
   });
 
-  it("edição não aceita nome de arquivo enviado pelo cliente", async () => {
+  it("edição não aceita nome de arquivo enviado pelo cliente (024: 400 no campo, anexo mantido)", async () => {
     await loginAs();
     const reg = await prisma.anexoFiscal.create({ data: { anexo: "mantido.pdf", dataRegistro: new Date(), contratoId } });
     const res = await item.PUT(
       jsonRequest(`/api/anexos_fiscais/${reg.id}`, "PUT", { anexo: "../../etc/passwd", contratoId: String(contratoId) }),
       idParams(reg.id),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect((await res.json()).errors.anexo).toBe("Envie o arquivo em PDF");
     expect((await prisma.anexoFiscal.findUnique({ where: { id: reg.id } }))?.anexo).toBe("mantido.pdf");
   });
 

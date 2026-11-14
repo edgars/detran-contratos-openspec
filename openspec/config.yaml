@@ -25,6 +25,8 @@ context: |
   - Uploads go through savePdf() from 001b-security-baseline: PDF signature check, size limit, stored outside public/, served only to a valid session.
   - Expiry ("vencendo"/"vencido"/vigência) uses ONLY the contract's own dataTermino, never the latest addendum (author decision 2026-11-13). Addenda are separate rows with their own dates.
   - Access profiles: Administrador, Gestor de contrato, Fiscal, Financeiro, Consulta (author decision 2026-11-13). A user may hold more than one profile.
+  - Permission matrix of 023-perfis-acesso is FINAL (author decision 2026-11-14, keep it to avoid drift): only Administrador deletes contracts; Fiscal and Financeiro only read contracts; Gestor de contrato sees ALL contracts (no restriction by unidade gestora), as in the legacy.
+  - Accepted defaults (author decision 2026-11-14): GET /api/health without session returning only status, blocked at the proxy for outside traffic (026); contract deletion rule of 020 (409 with addenda, payments, penalties or accountability; deletes attachments, progress, histories and inspectors together).
   - Production keeps SQLite on a single server with Docker Compose (author decision 2026-11-13); backups and HTTPS are part of 026-producao.
   - Legacy data migration: no dump available yet (2026-11-13); 025 ships the loader and its checks, run when the dump arrives.
   - Legacy evidence for changes 019+ lives in docs/legado/ (read from the RNC MCP); cite it instead of guessing.

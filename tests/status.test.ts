@@ -90,4 +90,22 @@ describe("011-status", () => {
     expect((await collection.POST(jsonRequest("/api/status", "POST", { nome: "X" }))).status).toBe(401);
     expect((await item.DELETE(jsonRequest("/api/status/1", "DELETE"), idParams(1))).status).toBe(401);
   });
+
+  // 024-kit-robustez › crud-kit › "Busca em colunas numéricas"
+  it("Texto em coluna numérica: q=abc → 200 com os status cujo nome ou fluxo contém abc", async () => {
+    await loginAs();
+    await prisma.status.create({ data: { nome: "Status abc", fluxo: "saida", periodo: 7 } });
+    await prisma.status.create({ data: { nome: "Outro", fluxo: "fluxo abc", periodo: 8 } });
+    const res = await collection.GET(jsonRequest("/api/status?q=abc&size=100"));
+    expect(res.status).toBe(200);
+    const nomes = (await res.json()).items.map((s: { nome: string }) => s.nome).sort();
+    expect(nomes).toEqual(["Outro", "Status abc"]);
+  });
+
+  it("Número em coluna numérica: q=30 traz o status com periodo 30", async () => {
+    await loginAs();
+    const s = await prisma.status.create({ data: { nome: "Trinta dias", fluxo: "x", periodo: 30 } });
+    const body = await (await collection.GET(jsonRequest("/api/status?q=30&size=100"))).json();
+    expect(body.items.map((r: { id: number }) => r.id)).toContain(s.id);
+  });
 });

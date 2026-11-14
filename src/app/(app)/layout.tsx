@@ -18,10 +18,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false";
   return (
     <SidebarProvider defaultOpen={sidebarOpen}>
-      <AppSidebar />
+      {/* Perfis lidos do banco nesta requisição (023-perfis-acesso): o menu mostra só o que o usuário pode listar. */}
+      <AppSidebar perfis={user.perfis} />
       {/* min-w-0: conteúdo largo (tabelas) rola no próprio contêiner, nunca a página inteira. */}
       <SidebarInset className="min-w-0">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
+        {/* print:hidden: o cabeçalho do app não sai na impressão (019-relatorios › Conteúdo impresso). */}
+        <header className="sticky top-0 z-20 flex h-14 print:hidden shrink-0 items-center gap-2 border-b bg-background px-4 md:px-6">
           <SidebarTrigger className="-ml-1.5" aria-label="Mostrar ou ocultar o menu" title="Mostrar ou ocultar o menu" />
           <Separator orientation="vertical" className="mr-1 h-5 self-center!" />
           <div className="min-w-0 flex-1">
