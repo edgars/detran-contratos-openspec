@@ -4,9 +4,12 @@
  * `name` é o nome da entidade na spec; `label` é o texto exibido; `change` diz qual change
  * entrega a lista da entidade.
  */
+import { can, type Perfil, type Recurso } from "@/lib/auth/permissions";
+
 export type NavGroup = "contratos" | "documentos" | "cadastros" | "administracao";
 
-export type NavItem = { name: string; label: string; href: string; change: string; group: NavGroup };
+/** `resource`: recurso da matriz (023-perfis-acesso); o item só aparece com `listar` nele. */
+export type NavItem = { name: string; label: string; resource: Recurso; href: string; change: string; group: NavGroup };
 
 /** Grupos do menu lateral, na ordem em que aparecem. */
 export const NAV_GROUPS: readonly { id: NavGroup; label: string }[] = [
@@ -17,34 +20,34 @@ export const NAV_GROUPS: readonly { id: NavGroup; label: string }[] = [
 ];
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { name: "Departamentos", label: "Departamentos", href: "/departamentos", change: "002-departamentos", group: "cadastros" },
-  { name: "TipoContratos", label: "Tipos de contrato", href: "/tipo_contratos", change: "003-tipo-contratos", group: "cadastros" },
-  { name: "ContratoStatus", label: "Status do contrato", href: "/contrato_status", change: "004-contrato-status", group: "contratos" },
-  { name: "Users", label: "Usuários", href: "/users", change: "005-users", group: "administracao" },
-  { name: "Pagamentos", label: "Pagamentos", href: "/pagamentos", change: "006-pagamentos", group: "contratos" },
-  { name: "Modalidades", label: "Modalidades", href: "/modalidades", change: "007-modalidades", group: "cadastros" },
-  { name: "PrestacaoContas", label: "Prestação de contas", href: "/prestacao_contas", change: "008-prestacao-contas", group: "contratos" },
-  { name: "Fases", label: "Fases", href: "/fases", change: "009-fases", group: "cadastros" },
-  { name: "Fiscais", label: "Fiscais", href: "/fiscais", change: "010-fiscais", group: "contratos" },
-  { name: "Status", label: "Status", href: "/status", change: "011-status", group: "cadastros" },
-  { name: "Historicos", label: "Históricos", href: "/historicos", change: "012-historicos", group: "contratos" },
-  { name: "AnexosFiscais", label: "Anexos de fiscalização", href: "/anexos_fiscais", change: "013-anexos-fiscais", group: "documentos" },
+  { name: "Departamentos", resource: "cadastros", label: "Departamentos", href: "/departamentos", change: "002-departamentos", group: "cadastros" },
+  { name: "TipoContratos", resource: "cadastros", label: "Tipos de contrato", href: "/tipo_contratos", change: "003-tipo-contratos", group: "cadastros" },
+  { name: "ContratoStatus", resource: "contrato_status", label: "Status do contrato", href: "/contrato_status", change: "004-contrato-status", group: "contratos" },
+  { name: "Users", resource: "users", label: "Usuários", href: "/users", change: "005-users", group: "administracao" },
+  { name: "Pagamentos", resource: "pagamentos", label: "Pagamentos", href: "/pagamentos", change: "006-pagamentos", group: "contratos" },
+  { name: "Modalidades", resource: "cadastros", label: "Modalidades", href: "/modalidades", change: "007-modalidades", group: "cadastros" },
+  { name: "PrestacaoContas", resource: "prestacao_contas", label: "Prestação de contas", href: "/prestacao_contas", change: "008-prestacao-contas", group: "contratos" },
+  { name: "Fases", resource: "cadastros", label: "Fases", href: "/fases", change: "009-fases", group: "cadastros" },
+  { name: "Fiscais", resource: "fiscais", label: "Fiscais", href: "/fiscais", change: "010-fiscais", group: "contratos" },
+  { name: "Status", resource: "cadastros", label: "Status", href: "/status", change: "011-status", group: "cadastros" },
+  { name: "Historicos", resource: "historicos", label: "Históricos", href: "/historicos", change: "012-historicos", group: "contratos" },
+  { name: "AnexosFiscais", resource: "anexos_fiscais", label: "Anexos de fiscalização", href: "/anexos_fiscais", change: "013-anexos-fiscais", group: "documentos" },
   {
-    name: "SituacaoContratuals",
+    name: "SituacaoContratuals", resource: "cadastros",
     label: "Situação contratual",
     href: "/situacao_contratuals",
     change: "014-situacao-contratuals", group: "cadastros"
   },
   {
-    name: "AnexosPublicacaos",
+    name: "AnexosPublicacaos", resource: "anexos_publicacaos",
     label: "Anexos de publicação",
     href: "/anexos_publicacaos",
     change: "015-anexos-publicacaos", group: "documentos"
   },
-  { name: "Penalidades", label: "Penalidades", href: "/penalidades", change: "016-penalidades", group: "contratos" },
-  { name: "Contratos", label: "Contratos", href: "/contratos", change: "017-contratos", group: "contratos" },
+  { name: "Penalidades", resource: "penalidades", label: "Penalidades", href: "/penalidades", change: "016-penalidades", group: "contratos" },
+  { name: "Contratos", resource: "contratos", label: "Contratos", href: "/contratos", change: "017-contratos", group: "contratos" },
   // 019-relatorios: um item só, que abre o índice dos seis relatórios.
-  { name: "Relatorios", label: "Relatórios", href: "/relatorios", change: "019-relatorios", group: "contratos" },
+  { name: "Relatorios", resource: "relatorios", label: "Relatórios", href: "/relatorios", change: "019-relatorios", group: "contratos" },
 ];
 
 export function findNavItem(slug: string): NavItem | undefined {
@@ -59,9 +62,15 @@ export const NAV_ORDER: readonly string[] = [
   "Users",
 ];
 
-export function navByGroup() {
+/**
+ * Menu do usuário (023-perfis-acesso): só os itens cujo recurso ele pode listar, e só os grupos que
+ * ficam com algum item.
+ */
+export function navByGroup(user: { perfis: readonly Perfil[] }) {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: NAV_ITEMS.filter((i) => i.group === g.id).sort((a, b) => NAV_ORDER.indexOf(a.name) - NAV_ORDER.indexOf(b.name)),
-  }));
+    items: NAV_ITEMS.filter((i) => i.group === g.id && can(user, i.resource, "listar")).sort(
+      (a, b) => NAV_ORDER.indexOf(a.name) - NAV_ORDER.indexOf(b.name),
+    ),
+  })).filter((g) => g.items.length > 0);
 }

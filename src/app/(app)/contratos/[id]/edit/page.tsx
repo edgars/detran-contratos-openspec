@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { EntityForm } from "@/components/crud/entity-form";
 import { contratos } from "@/lib/entities/contratos";
 import { getContratoDetalhe } from "@/lib/entities/contratos.server";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,9 @@ const EXCLUSAO =
 
 export default async function EditarContratoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // 023-perfis-acesso: abre com `contratos:ver` (sem `editar`, em leitura); a visão restrita não abre o formulário.
+  const user = await guardPage("contratos", "ver");
+  if (!user) return <SemPermissao />;
   const detalhe = /^\d+$/.test(id) ? await getContratoDetalhe(Number(id)) : null;
   if (!detalhe) notFound();
   const numero = detalhe.contrato.numeroContrato ?? `#${id}`;
@@ -27,6 +33,9 @@ export default async function EditarContratoPage({ params }: { params: Promise<{
         <span className="tabular-nums">Voltar ao contrato {numero}</span>
       </Link>
       <EntityForm
+        readOnly={!can(user, "contratos", "editar")}
+        canDelete={can(user, "contratos", "excluir")}
+        canAttach={can(user, "contratos", "anexar")}
         title={`Editar contrato ${numero}`}
         api={contratos.api}
         basePath={contratos.basePath}

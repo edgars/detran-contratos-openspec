@@ -101,10 +101,12 @@ function FaseLinha({
   contratoId,
   fase,
   onSaved,
+  podeGravar,
 }: {
   contratoId: number;
   fase: FluxoData["fases"][number];
   onSaved: (concluiu: boolean) => void;
+  podeGravar: boolean;
 }) {
   const id = useId();
   const [descricao, setDescricao] = useState(fase.ultimo?.descricao ?? "");
@@ -136,6 +138,28 @@ function FaseLinha({
   };
 
   const erro = Object.values(errors)[0];
+  const gravada = (
+    <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+      {fase.ultimo
+        ? `Gravada em ${formatDate(fase.ultimo.dataInclusao) || EMPTY}${fase.ultimo.usuario ? ` por ${fase.ultimo.usuario.username}` : ""}`
+        : "Ainda não gravada"}
+    </p>
+  );
+  if (!podeGravar) {
+    // 023-perfis-acesso: sem `prestacao_contas:criar` (Fiscal, Financeiro), a fase só é consultada.
+    return (
+      <TableRow className="align-top hover:bg-transparent">
+        <TableCell className="min-w-44 px-3 py-3 whitespace-normal">
+          <p className="font-medium">{fase.nome}</p>
+          {gravada}
+        </TableCell>
+        <TableCell className="min-w-56 px-3 py-3 whitespace-pre-wrap sm:min-w-64">
+          {fase.ultimo?.descricao || <span className="text-muted-foreground">{EMPTY}</span>}
+        </TableCell>
+        <TableCell className="px-3 py-3">{fase.ultimo ? (fase.ultimo.atendido === "S" ? "Sim" : "Não") : EMPTY}</TableCell>
+      </TableRow>
+    );
+  }
   return (
     <TableRow className="align-top hover:bg-transparent">
       <TableCell className="min-w-44 px-3 py-3 whitespace-normal">
@@ -184,7 +208,7 @@ function FaseLinha({
 }
 
 /** Fluxo de prestação de contas: painel, prazo, fases do prazo e histórico (021-prestacao-contas-fluxo). */
-export function FluxoPrestacao({ data }: { data: FluxoData }) {
+export function FluxoPrestacao({ data, podeGravar = true }: { data: FluxoData; podeGravar?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const c = data.contrato;
@@ -309,20 +333,22 @@ export function FluxoPrestacao({ data }: { data: FluxoData }) {
                   <TableHead className="h-9 px-3 text-xs font-medium text-muted-foreground">Fase</TableHead>
                   <TableHead className="h-9 px-3 text-xs font-medium text-muted-foreground">Descrição</TableHead>
                   <TableHead className="h-9 px-3 text-xs font-medium text-muted-foreground">Atendido</TableHead>
-                  <TableHead className="h-9 px-3 text-xs font-medium text-muted-foreground">
-                    <span className="sr-only">Ação</span>
-                  </TableHead>
+                  {podeGravar && (
+                    <TableHead className="h-9 px-3 text-xs font-medium text-muted-foreground">
+                      <span className="sr-only">Ação</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.fases.map((f) => (
-                  <FaseLinha key={`${f.id}-${f.ultimo?.id ?? 0}`} contratoId={c.id} fase={f} onSaved={onSaved} />
+                  <FaseLinha key={`${f.id}-${f.ultimo?.id ?? 0}`} contratoId={c.id} fase={f} onSaved={onSaved} podeGravar={podeGravar} />
                 ))}
               </TableBody>
             </Table>
           </div>
         )}
-        {data.periodo === "30" && !data.realizada && (
+        {podeGravar && data.periodo === "30" && !data.realizada && (
           <p className="text-sm text-muted-foreground">Gravar uma fase deste prazo com Atendido ligado conclui a prestação de contas.</p>
         )}
       </Secao>

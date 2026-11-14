@@ -24,6 +24,7 @@ export const contratoStatusSchema = z.object({
 const OPTIONAL = ["descricao", "atendido"] as const;
 
 export const contratoStatusApi = crudHandlers({
+  resource: "contrato_status", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.contratoStatus,
   schema: contratoStatusSchema,
   // `atendido` é Int: igualdade quando `q` é inteiro (kit, 024-kit-robustez › D7); "sim"/"não" viram 1/0.

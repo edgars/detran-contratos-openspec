@@ -26,6 +26,7 @@ export const tipoContratosSchema = z.object({
 });
 
 export const tipoContratosApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.tipoContrato,
   schema: tipoContratosSchema,
   searchFields: ["nome", "gerenciamento"],

@@ -4,12 +4,16 @@ import { notFound } from "next/navigation";
 import { EntityForm } from "@/components/crud/entity-form";
 import { contratos } from "@/lib/entities/contratos";
 import { getContratoDetalhe } from "@/lib/entities/contratos.server";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
 /** Novo aditivo: grava um contrato filho via `POST /api/contratos/:id/aditivos`. */
 export default async function NovoAditivoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // 023-perfis-acesso: criar aditivo exige `contratos:criar`.
+  if (!(await guardPage("contratos", "criar"))) return <SemPermissao />;
   const detalhe = /^\d+$/.test(id) ? await getContratoDetalhe(Number(id)) : null;
   if (!detalhe) notFound();
   const numero = detalhe.contrato.numeroContrato ?? `#${id}`;

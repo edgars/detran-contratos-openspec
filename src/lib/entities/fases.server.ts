@@ -10,6 +10,7 @@ export const fasesSchema = z.object({
 });
 
 export const fasesApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.fase,
   schema: fasesSchema,
   searchFields: ["nome", "periodo"],

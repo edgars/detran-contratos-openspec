@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { pageResponse, parsePagination, validationError, type FieldErrors } from "@/lib/api/http";
 import { UnauthorizedError, requireUser, stripSecrets, type SessionUser } from "@/lib/auth/session";
+import { ForbiddenError, MSG_SEM_PERMISSAO, can, type Recurso } from "@/lib/auth/permissions";
 import type { AttachmentRule } from "@/lib/rules/attachments";
 import { UploadError, UploadSession } from "@/lib/uploads";
 
@@ -12,7 +13,9 @@ import { UploadError, UploadSession } from "@/lib/uploads";
  * `page`, `size`, `q`; erro 400 por campo) e a base de segurança (sessão obrigatória, schema
  * estrito, nenhum campo fora do schema é gravado). 024-kit-robustez: ciclo de vida dos anexos
  * (`fileFields`, `ctx.files`), `beforeDelete`, `listWhere` assíncrono, busca em colunas `int`,
- * ordenação `sort` e respostas sem campos de senha em qualquer nível.
+ * ordenação `sort` e respostas sem campos de senha em qualquer nível. 023-perfis-acesso: cada handler
+ * checa a permissão do `resource` (listar, ver, criar, editar, excluir; `anexar` quando o corpo traz
+ * arquivo) depois da sessão e antes de qualquer leitura ou gravação; sem ela, `403`.
  */
 
 type Delegate = {
@@ -45,6 +48,13 @@ export type SearchField = string | { field: string; type: "int" };
 type SaveCtx = { user: SessionUser; id?: number; mode: "create" | "update"; current?: unknown; files: UploadSession };
 
 export type CrudConfig<S extends z.ZodObject> = {
+  /** Recurso da matriz de permissões (023-perfis-acesso, `src/lib/auth/permissions.ts`). */
+  resource: Recurso;
+  /**
+   * Visão restrita (023): quem não tem `ver` no `resource` mas tem `ver` em `restricted.resource`
+   * recebe a lista e o detalhe por `restricted.serialize` (ex.: `contratos_resumo`).
+   */
+  restricted?: { resource: Recurso; serialize: (row: unknown) => unknown };
   /** Delegate do Prisma, ex.: `(db: Db = prisma) => db.fase`. Recebe o cliente da transação na exclusão. */
   delegate: (tx?: Db) => unknown;
   /** Schema de criação. É aplicado com `.strict()`: campo desconhecido gera 400. */
@@ -96,6 +106,7 @@ const prismaCode = (error: unknown) =>
 
 export function handleError(error: unknown) {
   if (error instanceof UnauthorizedError) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  if (error instanceof ForbiddenError) return NextResponse.json({ error: MSG_SEM_PERMISSAO }, { status: 403 });
   if (error instanceof FieldRuleError) return NextResponse.json({ errors: error.errors }, { status: 400 });
   if (error instanceof UploadError) {
     return NextResponse.json({ errors: { [error.field ?? "_"]: error.message } }, { status: 400 });
@@ -140,9 +151,25 @@ export function sortOrder(params: URLSearchParams, sortFields: string[] | undefi
   return hasId ? base : [...base, { id: "desc" }];
 }
 
+/** Algum campo do corpo é um arquivo enviado (Blob não vazio): a requisição exige `anexar`. */
+export const hasUpload = (raw: RawBody) => Object.values(raw).some((v) => v instanceof Blob && v.size > 0);
+
 export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
   const d = (tx?: Db) => config.delegate(tx) as Delegate;
   const serialize = (row: unknown) => stripSecrets(config.serialize ? config.serialize(row) : row);
+  const { resource, restricted } = config;
+  /** Sessão (401) e permissão (403), nesta ordem. */
+  async function authorize(acao: "listar" | "criar" | "editar" | "excluir") {
+    const user = await requireUser();
+    if (!can(user, resource, acao)) throw new ForbiddenError();
+    return user;
+  }
+  /** Serializador de leitura: completo com `ver`; restrito com `ver` no recurso da visão restrita; senão `null`. */
+  function readerFor(user: SessionUser) {
+    if (can(user, resource, "ver")) return serialize;
+    if (restricted && can(user, restricted.resource, "ver")) return (row: unknown) => stripSecrets(restricted.serialize(row));
+    return null;
+  }
   const fileFields = Object.entries(config.fileFields ?? {});
   // Os anexos são tratados pelo kit: saem do schema validado e entram em `data` depois da validação.
   const omitFiles = <T extends z.ZodObject>(schema: T) => {
@@ -172,14 +199,16 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
   }
 
   async function save(request: Request, mode: "create" | "update", id?: number) {
-    const user = await requireUser();
+    const user = await authorize(mode === "create" ? "criar" : "editar");
+    let raw = await readBody(request);
+    // 023-perfis-acesso: arquivo enviado exige `anexar`, checado antes de qualquer savePdf.
+    if (hasUpload(raw) && !can(user, resource, "anexar")) throw new ForbiddenError();
     const current = id ? await d().findUnique({ where: { id } }) : undefined;
     if (mode === "update" && !current) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });
     const files = new UploadSession();
     let row: unknown;
     let stored: Record<string, string>;
     try {
-      let raw = await readBody(request);
       stored = await saveFiles(raw, mode, files);
       const ctx: SaveCtx = { user, id, mode, current: current ?? undefined, files };
       if (config.prepare) raw = await config.prepare(raw, ctx);
@@ -207,7 +236,9 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
     /** `GET /api/<entidade>` */
     async list(request: Request) {
       try {
-        const user = await requireUser();
+        const user = await authorize("listar");
+        // Lista com o serializador do detalhe: completo, restrito (023) ou o completo quando só há `listar`.
+        const out = readerFor(user) ?? serialize;
         const params = new URL(request.url).searchParams;
         const p = parsePagination(params);
         const filters: object[] = [];
@@ -226,7 +257,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
           }),
           d().count({ where }),
         ]);
-        return pageResponse(items.map(serialize), total, p);
+        return pageResponse(items.map(out), total, p);
       } catch (error) {
         return handleError(error);
       }
@@ -242,11 +273,13 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
     /** `GET /api/<entidade>/:id` */
     async get(_request: Request, ctx: { params: Promise<{ id: string }> }) {
       try {
-        await requireUser();
+        const user = await requireUser();
+        const out = readerFor(user);
+        if (!out) throw new ForbiddenError();
         const id = parseId((await ctx.params).id);
         const row = id ? await d().findUnique({ where: { id }, include: config.include }) : null;
         if (!row) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });
-        return NextResponse.json(serialize(row));
+        return NextResponse.json(out(row));
       } catch (error) {
         return handleError(error);
       }
@@ -264,7 +297,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
     /** `DELETE /api/<entidade>/:id` — em transação, com `beforeDelete`; anexos apagados depois do commit. */
     async remove(_request: Request, ctx: { params: Promise<{ id: string }> }) {
       try {
-        const user = await requireUser();
+        const user = await authorize("excluir");
         const id = parseId((await ctx.params).id);
         const current = id ? await d().findUnique({ where: { id } }) : null;
         if (!current) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });

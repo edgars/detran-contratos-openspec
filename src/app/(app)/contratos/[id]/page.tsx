@@ -1,22 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  AlertTriangleIcon,
-  CalendarCheckIcon,
-  CalendarClockIcon,
-  CalendarXIcon,
-  FileTextIcon,
-  PencilIcon,
-  PlusIcon,
-} from "lucide-react";
+import { AlertTriangleIcon, CalendarCheckIcon, CalendarClockIcon, CalendarXIcon, FileTextIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { AndamentoForm } from "@/components/contratos/andamento-form";
 import { PrintButton } from "@/components/contratos/print-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getSessionUser } from "@/lib/auth/session";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 import { formatDataHora } from "@/lib/contratos/data-hora";
 import { vigencia, type EstadoVigencia, type Tom } from "@/lib/contratos/vigencia";
-import { getContratoDetalhe, type Andamento } from "@/lib/entities/contratos.server";
+import { getContratoDetalhe, getContratoResumoDetalhe, type Andamento } from "@/lib/entities/contratos.server";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -126,14 +120,31 @@ function Dados({ items }: { items: Item[] }) {
   );
 }
 
-/** Detalhe do contrato (017-contratos): dados, anexos e aditivos, com o botão Novo aditivo. */
+/**
+ * Detalhe do contrato (017-contratos): dados, anexos e aditivos, com o botão Novo aditivo.
+ * 023-perfis-acesso: com `contratos:ver`, a página completa (ações conforme as permissões); só com
+ * `contratos_resumo:ver` (Consulta), a visão restrita — sem anexos, andamento, Editar nem Novo aditivo.
+ */
 export default async function ContratoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: raw } = await params;
+  const user = await guardPage("contratos", "ver", ["contratos_resumo", "ver"]);
+  if (!user) return <SemPermissao />;
   const id = /^\d+$/.test(raw) ? Number(raw) : null;
-  const detalhe = id ? await getContratoDetalhe(id) : null;
+  const completo = can(user, "contratos", "ver");
+  // Visão restrita: só a projeção é lida do banco (getContratoResumoDetalhe).
+  const extra = id && completo ? await getContratoDetalhe(id) : null;
+  const detalhe = extra ?? (id && !completo ? await getContratoResumoDetalhe(id) : null);
   if (!detalhe) notFound();
-  const { contrato: c, gestor, suplente, fornecedor, publicacoes, fiscais, andamentos } = detalhe;
-  const user = await getSessionUser();
+  const { contrato: c, gestor, suplente, fornecedor } = detalhe;
+  const pode = {
+    editar: completo && can(user, "contratos", "editar"),
+    aditivo: completo && can(user, "contratos", "criar"),
+    imprimir: completo,
+    andamento: Boolean(extra) && can(user, "contrato_status", "listar"),
+    registrarAndamento: Boolean(extra) && can(user, "contrato_status", "criar"),
+    publicacoes: can(user, "anexos_publicacaos", "ver"),
+    fiscais: can(user, "anexos_fiscais", "ver"),
+  };
 
   const ehAditivo = Boolean(c.parentId);
   // Vigência só pela data do próprio contrato (diretiva do autor 13/11/2026): aditivos têm as próprias datas.
@@ -146,7 +157,7 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
     { label: "Modalidade", value: text(c.modalidade?.nome) },
     { label: "Nº da modalidade", value: text(c.numeroModalidade), numeric: true },
     { label: "Situação contratual", value: text(c.situacaoContratual?.descricao) },
-    { label: "Data de inclusão", value: date(c.dataInclusao), numeric: true },
+    ...(extra ? [{ label: "Data de inclusão", value: date(extra.contrato.dataInclusao), numeric: true }] : []),
   ];
   const partes: Item[] = [
     { label: "Unidade gestora", value: text(c.departamento?.deDepartamento) },
@@ -154,8 +165,12 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
     { label: "Fornecedor", value: parte(fornecedor) },
     { label: "Gestor", value: parte(gestor) },
     { label: "Gestor suplente", value: parte(suplente) },
-    { label: "Número de fiscais", value: text(c.numeroFiscais), numeric: true },
-    { label: "Localizado na Presidência", value: c.naPresidencia === 1 ? "Sim" : "Não" },
+    ...(extra
+      ? [
+          { label: "Número de fiscais", value: text(extra.contrato.numeroFiscais), numeric: true },
+          { label: "Localizado na Presidência", value: extra.contrato.naPresidencia === 1 ? "Sim" : "Não" },
+        ]
+      : []),
   ];
   const valores: Item[] = [
     { label: "Data de início", value: date(c.dataInicio), numeric: true },
@@ -178,14 +193,16 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
       <div className="hidden border-b pb-3 print:block">
         <p className="text-base font-semibold tabular-nums">DETRAN-RJ — Contrato nº {text(c.numeroContrato)}</p>
         <p className="text-sm tabular-nums">
-          Impresso em {formatDataHora(new Date())} por {user?.username ?? EMPTY}
+          Impresso em {formatDataHora(new Date())} por {user.username}
         </p>
       </div>
       <header>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0 space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight text-balance tabular-nums">
-              {ehAditivo ? `Aditivo do contrato ${text(c.parent?.numeroContrato ?? c.numeroContrato)}` : `Contrato ${text(c.numeroContrato)}`}
+              {ehAditivo
+                ? `Aditivo do contrato ${text(c.parent?.numeroContrato ?? c.numeroContrato)}`
+                : `Contrato ${text(c.numeroContrato)}`}
             </h1>
             {c.objeto && <p className="max-w-prose text-sm text-pretty text-muted-foreground">{c.objeto}</p>}
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -208,12 +225,14 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
                 Contrato original
               </Link>
             )}
-            <Link className={cn(buttonVariants({ variant: "outline" }))} href={`/contratos/${c.id}/edit`}>
-              <PencilIcon aria-hidden data-icon="inline-start" />
-              Editar
-            </Link>
-            <PrintButton />
-            {novoAditivo}
+            {pode.editar && (
+              <Link className={cn(buttonVariants({ variant: "outline" }))} href={`/contratos/${c.id}/edit`}>
+                <PencilIcon aria-hidden data-icon="inline-start" />
+                Editar
+              </Link>
+            )}
+            {pode.imprimir && <PrintButton />}
+            {pode.aditivo && novoAditivo}
           </div>
         </div>
       </header>
@@ -234,7 +253,9 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
         {c.aditivos.length === 0 ? (
           <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Nenhum aditivo registrado. Use Novo aditivo para prorrogar a vigência ou alterar valores.
+              {pode.aditivo
+                ? "Nenhum aditivo registrado. Use Novo aditivo para prorrogar a vigência ou alterar valores."
+                : "Nenhum aditivo registrado."}
             </p>
           </div>
         ) : (
@@ -270,37 +291,45 @@ export default async function ContratoPage({ params }: { params: Promise<{ id: s
         )}
       </Secao>
 
-      <Secao id="sec-anexos" title="Anexos">
-        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="min-w-0">
-            <h3 className="text-sm text-muted-foreground">Contrato</h3>
-            <div className="mt-1.5 text-sm">
-              <PdfLink nome={c.anexo} />
+      {extra && (
+        <Secao id="sec-anexos" title="Anexos">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="min-w-0">
+              <h3 className="text-sm text-muted-foreground">Contrato</h3>
+              <div className="mt-1.5 text-sm">
+                <PdfLink nome={extra.contrato.anexo} />
+              </div>
             </div>
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm text-muted-foreground">Projeto básico</h3>
-            <div className="mt-1.5 text-sm">
-              <PdfLink nome={c.projetoBasico} />
+            <div className="min-w-0">
+              <h3 className="text-sm text-muted-foreground">Projeto básico</h3>
+              <div className="mt-1.5 text-sm">
+                <PdfLink nome={extra.contrato.projetoBasico} />
+              </div>
             </div>
+            {pode.publicacoes && (
+              <AnexoLista
+                titulo="Publicação"
+                itens={extra.publicacoes.map((a) => ({ id: a.id, data: a.dataPublicacao, anexo: a.anexo }))}
+              />
+            )}
+            {pode.fiscais && (
+              <AnexoLista
+                titulo="Relatório fiscal"
+                itens={extra.fiscais.map((a) => ({ id: a.id, data: a.dataRegistro, anexo: a.anexo }))}
+              />
+            )}
           </div>
-          <AnexoLista
-            titulo="Publicação"
-            itens={publicacoes.map((a) => ({ id: a.id, data: a.dataPublicacao, anexo: a.anexo }))}
-          />
-          <AnexoLista
-            titulo="Relatório fiscal"
-            itens={fiscais.map((a) => ({ id: a.id, data: a.dataRegistro, anexo: a.anexo }))}
-          />
-        </div>
-      </Secao>
+        </Secao>
+      )}
 
-      <Secao id="sec-andamento" title={andamentos.length ? `Andamento (${andamentos.length})` : "Andamento"}>
-        <div className="space-y-6">
-          <AndamentoForm contratoId={c.id} />
-          <LinhaDoTempo itens={andamentos} />
-        </div>
-      </Secao>
+      {extra && pode.andamento && (
+        <Secao id="sec-andamento" title={extra.andamentos.length ? `Andamento (${extra.andamentos.length})` : "Andamento"}>
+          <div className="space-y-6">
+            {pode.registrarAndamento && <AndamentoForm contratoId={c.id} />}
+            <LinhaDoTempo itens={extra.andamentos} />
+          </div>
+        </Secao>
+      )}
     </div>
   );
 }
@@ -334,13 +363,7 @@ function LinhaDoTempo({ itens }: { itens: Andamento[] }) {
   );
 }
 
-function AnexoLista({
-  titulo,
-  itens,
-}: {
-  titulo: string;
-  itens: { id: number; data: Date | string | null; anexo: string | null }[];
-}) {
+function AnexoLista({ titulo, itens }: { titulo: string; itens: { id: number; data: Date | string | null; anexo: string | null }[] }) {
   return (
     <div className="min-w-0">
       <h3 className="text-sm text-muted-foreground">{titulo}</h3>

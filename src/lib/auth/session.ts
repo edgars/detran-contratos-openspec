@@ -1,10 +1,15 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { SESSION_COOKIE, randomToken, sha256, signToken, verifyToken } from "./token";
+import { perfisValidos, type Perfil } from "./permissions";
 
 export const SESSION_HOURS = 8;
 
-export type SessionUser = { id: number; username: string; superuser: number | null };
+/**
+ * Usuário da sessão. `perfis` (023-perfis-acesso) é lido do banco a cada requisição, na mesma consulta
+ * da sessão: troca de perfil vale na próxima requisição, sem novo login. `superuser` não concede nada.
+ */
+export type SessionUser = { id: number; username: string; superuser: number | null; perfis: Perfil[] };
 
 export const SECRET_FIELDS = ["password", "passwordHash", "passwordold", "passwordnew", "passwordconfirm"] as const;
 const SECRETS = new Set<string>(SECRET_FIELDS);
@@ -64,11 +69,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!token) return null;
   const session = await prisma.session.findUnique({
     where: { id: await sha256(token) },
-    include: { user: { select: { id: true, username: true, superuser: true, inativo: true } } },
+    include: {
+      user: {
+        select: { id: true, username: true, superuser: true, inativo: true, perfis: { select: { perfil: true } } },
+      },
+    },
   });
   if (!session || session.expiresAt < new Date() || session.user.inativo) return null;
-  const { id, username, superuser } = session.user;
-  return { id, username, superuser };
+  const { id, username, superuser, perfis } = session.user;
+  return { id, username, superuser, perfis: perfisValidos(perfis.map((p) => p.perfil)) };
 }
 
 export async function destroySession(): Promise<void> {

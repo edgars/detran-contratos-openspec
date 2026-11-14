@@ -97,7 +97,7 @@ describe("024-kit-robustez › crud-kit", () => {
     it("Erro do banco depois do upload: P2003 → 409 e o PDF não fica no disco", async () => {
       await loginAs();
       const { delegate } = fakeDelegate({ id: 1 }, { code: "P2003" });
-      const api = crudHandlers({ delegate: () => delegate, schema: z.object({}), fileFields: { arquivo: { rule: ANEXO_FISCAL } } });
+      const api = crudHandlers({ resource: "anexos_fiscais", delegate: () => delegate, schema: z.object({}), fileFields: { arquivo: { rule: ANEXO_FISCAL } } });
       const res = await api.create(multipart("/api/x", "POST", { arquivo: pdf() }));
       expect(res.status).toBe(409);
       expect(files()).toHaveLength(0);
@@ -169,6 +169,7 @@ describe("024-kit-robustez › crud-kit", () => {
       await loginAs();
       const a = await anexoFiscal();
       const api = crudHandlers({
+        resource: "anexos_fiscais",
         delegate: (db = prisma) => db.anexoFiscal,
         schema: z.object({}),
         fileFields: { anexo: { rule: ANEXO_FISCAL } },
@@ -209,6 +210,7 @@ describe("024-kit-robustez › crud-kit", () => {
       const { delegate, calls } = fakeDelegate(row);
       let visto: unknown;
       const api = crudHandlers({
+        resource: "anexos_fiscais",
         delegate: () => delegate,
         schema: z.object({ nome: z.string() }),
         prepare: (raw, ctx) => {
@@ -229,6 +231,7 @@ describe("024-kit-robustez › crud-kit", () => {
       const { delegate, calls } = fakeDelegate({ id: 1 });
       let ctxVisto: { user: { id: number }; q: string } | undefined;
       const api = crudHandlers({
+        resource: "anexos_fiscais",
         delegate: () => delegate,
         schema: z.object({}),
         listWhere: async (params, ctx) => {
@@ -311,7 +314,7 @@ describe("024-kit-robustez › crud-kit", () => {
     it("Gravação com valor único repetido: P2002 → 409 e nenhum PDF da requisição no disco", async () => {
       await loginAs();
       const { delegate } = fakeDelegate({ id: 1 }, { code: "P2002" });
-      const api = crudHandlers({ delegate: () => delegate, schema: z.object({}), fileFields: { arquivo: { rule: ANEXO_FISCAL } } });
+      const api = crudHandlers({ resource: "anexos_fiscais", delegate: () => delegate, schema: z.object({}), fileFields: { arquivo: { rule: ANEXO_FISCAL } } });
       const res = await api.create(multipart("/api/x", "POST", { arquivo: pdf() }));
       expect(res.status).toBe(409);
       expect((await res.json()).error).toBe("Já existe um registro com esse valor");

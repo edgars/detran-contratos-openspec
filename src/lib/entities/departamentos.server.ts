@@ -29,6 +29,7 @@ export const departamentosSchema = z.object({
 });
 
 export const departamentosApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.departamento,
   schema: departamentosSchema,
   searchFields: ["deDepartamento", "codigo"],

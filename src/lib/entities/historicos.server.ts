@@ -26,6 +26,7 @@ type Row = Record<string, unknown> & {
 const include = { usuario: { select: { id: true, username: true } } };
 
 const crud = crudHandlers({
+  resource: "historicos", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.historico,
   schema: historicosSchema,
   include,

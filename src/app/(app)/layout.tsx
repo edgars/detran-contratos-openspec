@@ -18,7 +18,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false";
   return (
     <SidebarProvider defaultOpen={sidebarOpen}>
-      <AppSidebar />
+      {/* Perfis lidos do banco nesta requisição (023-perfis-acesso): o menu mostra só o que o usuário pode listar. */}
+      <AppSidebar perfis={user.perfis} />
       {/* min-w-0: conteúdo largo (tabelas) rola no próprio contêiner, nunca a página inteira. */}
       <SidebarInset className="min-w-0">
         {/* print:hidden: o cabeçalho do app não sai na impressão (019-relatorios › Conteúdo impresso). */}

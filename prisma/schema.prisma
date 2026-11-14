@@ -153,8 +153,23 @@ model User {
   ultimoLogin  DateTime?
   sessions     Session[]
   historicos   Historico[] @relation("HistoricoUsuario")
+  /// Perfis de acesso (023-perfis-acesso); um usuário pode ter mais de um.
+  perfis       UserPerfil[]
 
   @@map("users")
+}
+
+/// Perfil de acesso de um usuário (023-perfis-acesso). `perfil` é um de ADMINISTRADOR, GESTOR_CONTRATO,
+/// FISCAL, FINANCEIRO, CONSULTA (CHECK na migração; z.enum na API).
+model UserPerfil {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  perfil String
+
+  @@unique([userId, perfil])
+  @@index([userId])
+  @@map("user_perfis")
 }
 
 /// Sessões emitidas pelo servidor (001b-security-baseline). `id` guarda o hash do token.

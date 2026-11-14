@@ -33,6 +33,7 @@ export const pagamentosSchema = z.object({
 });
 
 export const pagamentosApi = crudHandlers({
+  resource: "pagamentos", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.pagamento,
   schema: pagamentosSchema,
   searchFields: ["numeroProcesso", "ano", "notaFiscal", "empenho", "notaLiquidacao"],

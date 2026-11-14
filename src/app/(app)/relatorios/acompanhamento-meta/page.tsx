@@ -7,6 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency, formatDate } from "@/lib/format";
 import { SEM_TIPO_CONTRATO } from "@/lib/relatorios/comum";
 import { JANELA_RISCO, consultar, type BlocoMeta, type LinhaMeta } from "@/lib/relatorios/acompanhamento-meta";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,13 +43,17 @@ const termos = (n: number) => (n === 1 ? "1 termo" : `${n} termos`);
 
 /** Acompanhamento de meta (019-relatorios), igual ao legado (docs/legado/relatorios.md, tela `meta`). */
 export default async function AcompanhamentoMetaPage() {
+  // 023-perfis-acesso: a tela exige `relatorios:listar`; *Imprimir* e *Exportar CSV* só com `exportar`.
+  const user = await guardPage("relatorios", "listar");
+  if (!user) return <SemPermissao />;
+  const exportar = can(user, "relatorios", "exportar");
   const resultado = await consultar();
   const semTipo = resultado.avisos?.includes(SEM_TIPO_CONTRATO);
   return (
     <ReportPage
       titulo="Acompanhamento de meta"
       descricao="Contratos originais em três listas: vigentes do tipo Contrato, vencidos do tipo Contrato e em prorrogação/risco."
-      acoes={<ReportActions />}
+      acoes={exportar && <ReportActions />}
     >
       <ReportHeader titulo={resultado.titulo} />
       {semTipo && <AvisoSemTipoContrato />}
@@ -59,9 +66,15 @@ export default async function AcompanhamentoMetaPage() {
           <Table className="text-sm">
             <TableHeader className="bg-muted/50">
               <TableRow className="hover:bg-transparent">
-                <TableHead scope="col" className="h-9 px-3 text-xs font-medium text-muted-foreground">Lista</TableHead>
-                <TableHead scope="col" className="h-9 px-3 text-right text-xs font-medium text-muted-foreground">Valor total</TableHead>
-                <TableHead scope="col" className="h-9 px-3 text-right text-xs font-medium text-muted-foreground">Nº de termos</TableHead>
+                <TableHead scope="col" className="h-9 px-3 text-xs font-medium text-muted-foreground">
+                  Lista
+                </TableHead>
+                <TableHead scope="col" className="h-9 px-3 text-right text-xs font-medium text-muted-foreground">
+                  Valor total
+                </TableHead>
+                <TableHead scope="col" className="h-9 px-3 text-right text-xs font-medium text-muted-foreground">
+                  Nº de termos
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -83,7 +96,12 @@ export default async function AcompanhamentoMetaPage() {
       </section>
 
       {resultado.listas.map((b) => (
-        <section key={b.lista} id={`meta-${b.lista}`} aria-labelledby={`meta-${b.lista}-titulo`} className="flex scroll-mt-20 flex-col gap-3">
+        <section
+          key={b.lista}
+          id={`meta-${b.lista}`}
+          aria-labelledby={`meta-${b.lista}-titulo`}
+          className="flex scroll-mt-20 flex-col gap-3"
+        >
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id={`meta-${b.lista}-titulo`} className="text-base font-semibold">
               {b.rotulo}

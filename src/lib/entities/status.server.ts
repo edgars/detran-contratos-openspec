@@ -19,6 +19,7 @@ export const statusSchema = z.object({
 });
 
 export const statusApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.status,
   schema: statusSchema,
   // `periodo` é Int: igualdade só quando `q` é inteiro (024-kit-robustez › D7).

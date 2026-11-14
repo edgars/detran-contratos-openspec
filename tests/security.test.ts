@@ -191,7 +191,7 @@ describe("001b-security-baseline", () => {
     it("Campo extra no corpo: PUT de contrato_status com campo fora do schema responde 400 e nada muda", async () => {
       await loginAs();
       // Mesmo kit (crudHandlers + schema da entidade) que a rota /api/contrato_status usa.
-      const api = crudHandlers({ delegate: () => prisma.contratoStatus, schema: z.object(contratoStatusFields) });
+      const api = crudHandlers({ resource: "contrato_status", delegate: () => prisma.contratoStatus, schema: z.object(contratoStatusFields) });
       const cs = await prisma.contratoStatus.create({ data: { contratoId: 1, statusId: 1, descricao: "original" } });
       const res = await api.update(
         jsonRequest(`/api/contrato_status/${cs.id}`, "PUT", { descricao: "alterada", statusId: 999 }),
@@ -255,6 +255,8 @@ describe("001b-security-baseline", () => {
 
     it("Baixar anexo sem sessão: 401; com sessão: 200 application/pdf", async () => {
       const nome = await savePdf(new File([PDF_BYTES], "a.pdf", { type: "application/pdf" }), ANEXO_FISCAL);
+      // 023-perfis-acesso: o download exige um registro dono do arquivo (sem dono → 404).
+      await prisma.anexoFiscal.create({ data: { anexo: nome, contratoId: 1, dataRegistro: new Date() } });
       logout();
       expect((await arquivos.GET(jsonRequest(`/api/arquivos/${nome}`), nomeParams(nome))).status).toBe(401);
       expect((await middleware(new NextRequest(`http://localhost/api/arquivos/${nome}`))).status).toBe(401);
@@ -268,7 +270,7 @@ describe("001b-security-baseline", () => {
 
   describe("Autoria pela sessão", () => {
     it("Autoria forjada: withAuthor sobrescreve o userId enviado pelo cliente", async () => {
-      const eu = { id: 7, username: "eu", superuser: null };
+      const eu = { id: 7, username: "eu", superuser: null, perfis: [] };
       expect(withAuthor({ userId: 999, descricao: "x" }, eu)).toEqual({ userId: 7, descricao: "x" });
     });
 
@@ -289,7 +291,7 @@ describe("001b-security-baseline", () => {
     it("Busca com aspas: ' OR 1=1 -- não quebra e só traz registros que contêm o texto", async () => {
       await loginAs();
       // Mesmo kit (busca `q` com `contains`) que a lista de contratos usa.
-      const api = crudHandlers({ delegate: () => prisma.contrato, schema: z.object({}), searchFields: ["objeto"] });
+      const api = crudHandlers({ resource: "contratos", delegate: () => prisma.contrato, schema: z.object({}), searchFields: ["objeto"] });
       await prisma.contrato.create({ data: { objeto: "Normal sem aspas" } });
       await prisma.contrato.create({ data: { objeto: "Objeto com ' OR 1=1 -- dentro" } });
       const res = await api.list(jsonRequest(`/api/contratos?q=${encodeURIComponent("' OR 1=1 --")}`));
@@ -372,7 +374,7 @@ describe("001b-security-baseline", () => {
       const eu = await loginAs("aninhado.024");
       const contrato = await prisma.contrato.create({ data: { objeto: "Aninhado" } });
       await prisma.historico.create({ data: { contratoId: contrato.id, descricao: "x", dataInclusao: new Date(), usuarioId: eu.id } });
-      const api = crudHandlers({ delegate: (db = prisma) => db.historico, schema: z.object({}), include: { usuario: true } });
+      const api = crudHandlers({ resource: "historicos", delegate: (db = prisma) => db.historico, schema: z.object({}), include: { usuario: true } });
       const body = await (await api.list(jsonRequest("/api/historicos?size=100"))).json();
       expect(body.items.length).toBeGreaterThan(0);
       expect(body.items.some((h: { usuario?: { username: string } }) => h.usuario?.username === "aninhado.024")).toBe(true);

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { ConflictError, FieldRuleError, crudHandlers, readBody, type Db, type RawBody } from "@/lib/crud/server";
+import { ConflictError, FieldRuleError, crudHandlers, handleError, readBody, type Db, type RawBody } from "@/lib/crud/server";
 import { pageResponse, parsePagination, validationError } from "@/lib/api/http";
-import { UnauthorizedError, requireUser } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 import { ANEXO_CONTRATO, ANEXO_FISCAL, ANEXO_PUBLICACAO, MSG, contratoFields } from "@/lib/rules";
 import { optionalCpf, optionalString, requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
 import { onlyDigits } from "@/lib/documento";
@@ -235,7 +236,52 @@ export const contratoInclude = {
   modalidade: { select: { id: true, nome: true } },
 } satisfies Prisma.ContratoInclude;
 
+// ---------------------------------------------------------------------------------------------
+// Visão restrita (023-perfis-acesso, design.md › Visão restrita do contrato; `visualizar_restrito`)
+// ---------------------------------------------------------------------------------------------
+
+/** Campos de `contratos` da visão restrita: dados do contrato, sem anexos, projeto básico nem complementos. */
+const CAMPOS_RESUMO = [
+  "id",
+  "numeroProcesso",
+  "numeroContrato",
+  "tipoContratoId",
+  "modalidadeId",
+  "numeroModalidade",
+  "objeto",
+  "departamentoId",
+  "prestadorServicoId",
+  "pessoaFisicaId",
+  "suplenteId",
+  "dataInicio",
+  "dataTermino",
+  "valorMensal",
+  "valorTotal",
+  "valorInicial",
+  "situacaoContratualId",
+  "parentId",
+] as const;
+const RELACOES_RESUMO = ["tipoContrato", "modalidade", "departamento", "prestadorServico", "situacaoContratual", "parent"] as const;
+const CAMPOS_ADITIVO_RESUMO = ["id", "numeroContrato", "dataInicio", "dataTermino", "valorMensal", "valorTotal"] as const;
+
+const pick = <K extends string>(row: Record<string, unknown>, keys: readonly K[]) =>
+  Object.fromEntries(keys.filter((k) => k in row).map((k) => [k, row[k]])) as Record<K, unknown>;
+
+/**
+ * Projeção restrita do contrato (quem tem `contratos_resumo:ver` e não `contratos:ver`, ex.: Consulta):
+ * identificação, tipo, modalidade, objeto, unidade gestora, fornecedor, gestor e suplente, vigência,
+ * valores, situação e aditivos. Nunca `anexo`, `anexoTipo`, `projetoBasico` nem os registros do contrato.
+ */
+export function contratoResumo(row: unknown) {
+  const r = row as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...pick(r, CAMPOS_RESUMO), ...pick(r, RELACOES_RESUMO) };
+  if (Array.isArray(r.aditivos)) out.aditivos = r.aditivos.map((a) => pick(a as Record<string, unknown>, CAMPOS_ADITIVO_RESUMO));
+  return out;
+}
+
 const crud = crudHandlers({
+  resource: "contratos", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
+  restricted: { resource: "contratos_resumo", serialize: contratoResumo },
   delegate: contratoDelegate,
   schema: contratosSchema,
   include: contratoInclude,
@@ -338,11 +384,6 @@ export function contratosWhere(params: URLSearchParams, now = new Date()): Prism
   return and.length ? { AND: and } : undefined;
 }
 
-function unauthorized(error: unknown) {
-  if (error instanceof UnauthorizedError) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
-  throw error;
-}
-
 // ---------------------------------------------------------------------------------------------
 // Aditivos
 // ---------------------------------------------------------------------------------------------
@@ -361,10 +402,11 @@ const notFound = () => NextResponse.json({ error: "Registro não encontrado" }, 
 
 /** `GET /api/contratos/:id/aditivos` */
 async function listAditivos(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  let user;
   try {
-    await requireUser();
+    user = await requirePermission("contratos", "listar"); // 023-perfis-acesso
   } catch (error) {
-    return unauthorized(error);
+    return handleError(error);
   }
   const original = await findOriginal(ctx);
   if (!original) return notFound();
@@ -374,15 +416,16 @@ async function listAditivos(request: Request, ctx: { params: Promise<{ id: strin
     prisma.contrato.findMany({ where, orderBy: [{ dataInicio: "asc" }, { id: "asc" }], skip: (p.page - 1) * p.size, take: p.size, include: contratoInclude }),
     prisma.contrato.count({ where }),
   ]);
-  return pageResponse(items, total, p);
+  // Sem `contratos:ver` (Consulta): aditivos na visão restrita, sem anexos.
+  return pageResponse(can(user, "contratos", "ver") ? items : items.map(contratoResumo), total, p);
 }
 
 /** `POST /api/contratos/:id/aditivos` — cria um contrato filho (design.md › Decisions). */
 async function createAditivo(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireUser();
+    await requirePermission("contratos", "criar"); // 023-perfis-acesso: criar aditivo exige criar em contratos
   } catch (error) {
-    return unauthorized(error);
+    return handleError(error);
   }
   const original = await findOriginal(ctx);
   if (!original) return notFound();
@@ -433,6 +476,33 @@ export function rotuloPessoa(cpf: string | null, pessoas: Map<string, { deNome: 
 /** Rótulo do fornecedor no detalhe (022, D10): "Razão social — 11.222.333/0001-81". */
 export function rotuloFornecedor(p: { deRazaoSocial: string; cnpj: string | null }): string {
   return p.cnpj ? `${p.deRazaoSocial} — ${formatCnpj(p.cnpj)}` : p.deRazaoSocial;
+}
+
+/**
+ * Dados da visão restrita de `/contratos/[id]` (023-perfis-acesso, Consulta): só os campos da
+ * projeção restrita (`contratoResumo`), sem anexos, andamento nem outros registros do contrato.
+ */
+export async function getContratoResumoDetalhe(id: number) {
+  const contrato = await prisma.contrato.findUnique({
+    where: { id },
+    select: {
+      ...Object.fromEntries(CAMPOS_RESUMO.map((k) => [k, true])) as Record<(typeof CAMPOS_RESUMO)[number], true>,
+      ...contratoInclude,
+      parent: { select: { id: true, numeroContrato: true } },
+      aditivos: {
+        select: Object.fromEntries(CAMPOS_ADITIVO_RESUMO.map((k) => [k, true])) as Record<(typeof CAMPOS_ADITIVO_RESUMO)[number], true>,
+        orderBy: [{ dataInicio: "asc" }, { id: "asc" }],
+      },
+    },
+  });
+  if (!contrato) return null;
+  const pessoas = await pessoasPorCpf([contrato.pessoaFisicaId, contrato.suplenteId]);
+  return {
+    contrato,
+    gestor: rotuloPessoa(contrato.pessoaFisicaId, pessoas),
+    suplente: rotuloPessoa(contrato.suplenteId, pessoas),
+    fornecedor: contrato.prestadorServico ? rotuloFornecedor(contrato.prestadorServico) : null,
+  };
 }
 
 /** Dados da página de detalhe (`/contratos/[id]`): contrato, original (se aditivo), aditivos e anexos. */

@@ -4,6 +4,8 @@ import { ReportTable, traco, type ColunaTabela } from "@/components/relatorios/r
 import { SEM_TIPO_CONTRATO } from "@/lib/relatorios/comum";
 import { consultar, type LinhaCadastro } from "@/lib/relatorios/cadastro-incompleto";
 import { cn } from "@/lib/utils";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,9 @@ const COLUNAS: ColunaTabela<LinhaCadastro>[] = [
 
 /** Cadastro incompleto (019-relatorios; docs/legado/relatorios.md, tela `cadastro`). Sem filtros, só tela. */
 export default async function CadastroIncompletoPage() {
+  // 023-perfis-acesso: a tela exige `relatorios:listar`.
+  const user = await guardPage("relatorios", "listar");
+  if (!user) return <SemPermissao />;
   const resultado = await consultar();
   const semTipo = resultado.avisos?.includes(SEM_TIPO_CONTRATO);
   return (

@@ -17,6 +17,7 @@ export const anexosFiscaisSchema = z.object({
 });
 
 export const anexosFiscaisApi = crudHandlers({
+  resource: "anexos_fiscais", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.anexoFiscal,
   schema: anexosFiscaisSchema,
   fileFields: {

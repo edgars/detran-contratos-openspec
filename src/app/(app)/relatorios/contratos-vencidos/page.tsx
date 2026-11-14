@@ -6,6 +6,9 @@ import { ReportTable } from "@/components/relatorios/report-table";
 import { COLUNAS_TABELA_CONTRATO } from "@/components/relatorios/colunas-contrato";
 import { csvHref, lerParams, temFiltro } from "@/lib/relatorios/params";
 import { consultar, params, slug } from "@/lib/relatorios/contratos-vencidos";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,10 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 
 /** Contratos vencidos (019-relatorios; docs/legado/relatorios.md, tela `vencidos`). Abre sem consulta até gerar. */
 export default async function ContratosVencidosPage({ searchParams }: Props) {
+  // 023-perfis-acesso: a tela exige `relatorios:listar`; *Imprimir* e *Exportar CSV* só com `exportar`.
+  const user = await guardPage("relatorios", "listar");
+  if (!user) return <SemPermissao />;
+  const exportar = can(user, "relatorios", "exportar");
   const lido = lerParams(params, await searchParams);
   const gerado = temFiltro(lido.raw);
   const erros = gerado && !lido.ok ? lido.errors : {};
@@ -23,7 +30,7 @@ export default async function ContratosVencidosPage({ searchParams }: Props) {
       paisagem
       titulo="Contratos vencidos"
       descricao="Contratos originais cuja data de término está no período informado, as duas datas inclusive."
-      acoes={resultado && <ReportActions csvHref={csvHref(slug, lido.raw)} />}
+      acoes={resultado && exportar && <ReportActions csvHref={csvHref(slug, lido.raw)} />}
     >
       <ReportFilters action="/relatorios/contratos-vencidos" limparHref={gerado ? "/relatorios/contratos-vencidos" : undefined}>
         <CampoData name="inicio" label="Vencimento de" required defaultValue={lido.raw.inicio} error={erros.inicio} />

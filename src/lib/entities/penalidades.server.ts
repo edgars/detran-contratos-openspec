@@ -22,6 +22,7 @@ export function preparePenalidade(raw: RawBody): RawBody {
 }
 
 export const penalidadesApi = crudHandlers({
+  resource: "penalidades", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.penalidade,
   schema: penalidadesSchema,
   fileFields: {

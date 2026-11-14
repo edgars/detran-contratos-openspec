@@ -38,7 +38,7 @@ describe("navegação principal", () => {
 // 019-relatorios › specs/app-shell/spec.md
 describe("019 › item Relatórios", () => {
   it("Abrir o app: 'Relatórios' no grupo Gestão de contratos, logo depois de Contratos, abre /relatorios", () => {
-    const grupo = navByGroup().find((g) => g.id === "contratos")!;
+    const grupo = navByGroup({ perfis: ["ADMINISTRADOR"] }).find((g) => g.id === "contratos")!;
     expect(grupo.label).toBe("Gestão de contratos");
     const nomes = grupo.items.map((i) => i.name);
     expect(nomes.indexOf("Relatorios")).toBe(nomes.indexOf("Contratos") + 1);
@@ -51,5 +51,32 @@ describe("019 › item Relatórios", () => {
       { label: "Contratos vencendo", href: "/relatorios/contratos-vencendo" },
     ]);
     expect(crumbsFor("/relatorios/acerto-valor").at(-1)?.label).toBe("Acerto de valor");
+  });
+});
+
+// 023-perfis-acesso › specs/perfis-acesso/spec.md › "Menu e ações conforme as permissões"
+describe("023 › menu conforme as permissões", () => {
+  const nomes = (perfis: Parameters<typeof navByGroup>[0]["perfis"]) => navByGroup({ perfis }).flatMap((g) => g.items.map((i) => i.name));
+
+  it("Menu da Consulta: Contratos, Relatórios e os cadastros auxiliares; sem Usuários, Pagamentos, Históricos nem Anexos", () => {
+    const menu = nomes(["CONSULTA"]);
+    for (const n of ["Contratos", "Relatorios", "Departamentos", "TipoContratos", "Modalidades", "SituacaoContratuals", "Fases", "Status"]) {
+      expect(menu, n).toContain(n);
+    }
+    for (const n of ["Users", "Pagamentos", "Historicos", "AnexosFiscais", "AnexosPublicacaos"]) expect(menu, n).not.toContain(n);
+    // Grupos que ficam vazios somem.
+    expect(navByGroup({ perfis: ["CONSULTA"] }).map((g) => g.id)).toEqual(["contratos", "cadastros"]);
+  });
+
+  it("cada item declara um recurso; Administrador vê todos; sem perfil, nenhum", () => {
+    expect(nomes(["ADMINISTRADOR"]).sort()).toEqual(NAV_ITEMS.map((i) => i.name).sort());
+    expect(navByGroup({ perfis: [] })).toEqual([]);
+  });
+
+  it("perfis somam: Fiscal + Financeiro vê Pagamentos e Anexos de fiscalização, não Usuários", () => {
+    const menu = nomes(["FISCAL", "FINANCEIRO"]);
+    expect(menu).toContain("Pagamentos");
+    expect(menu).toContain("AnexosFiscais");
+    expect(menu).not.toContain("Users");
   });
 });

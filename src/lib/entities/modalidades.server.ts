@@ -9,6 +9,7 @@ export const modalidadesSchema = z.object({
 });
 
 export const modalidadesApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.modalidade,
   schema: modalidadesSchema,
   searchFields: ["nome"],

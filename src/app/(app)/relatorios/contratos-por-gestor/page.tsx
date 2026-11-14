@@ -7,6 +7,9 @@ import { ReportTable, traco, type ColunaTabela } from "@/components/relatorios/r
 import { formatCurrency } from "@/lib/format";
 import { csvHref, lerParams } from "@/lib/relatorios/params";
 import { consultar, gestores, params, slug, type LinhaGestor } from "@/lib/relatorios/contratos-por-gestor";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,10 @@ const COLUNAS: ColunaTabela<LinhaGestor>[] = [
 
 /** Contratos por gestor (019-relatorios; docs/legado/relatorios.md, tela `gestores`). */
 export default async function ContratosPorGestorPage({ searchParams }: Props) {
+  // 023-perfis-acesso: a tela exige `relatorios:listar`; *Imprimir* e *Exportar CSV* só com `exportar`.
+  const user = await guardPage("relatorios", "listar");
+  if (!user) return <SemPermissao />;
+  const exportar = can(user, "relatorios", "exportar");
   const lido = lerParams(params, await searchParams);
   const erros = lido.ok ? {} : lido.errors;
   const [opcoesGestor, departamentos, resultado] = await Promise.all([
@@ -44,10 +51,18 @@ export default async function ContratosPorGestorPage({ searchParams }: Props) {
     <ReportPage
       titulo="Contratos por gestor"
       descricao="Contratos originais agrupados por gestor, tipo de contrato e unidade gestora, com a quantidade e a soma do valor total."
-      acoes={resultado && <ReportActions csvHref={csvHref(slug, lido.raw)} />}
+      acoes={resultado && exportar && <ReportActions csvHref={csvHref(slug, lido.raw)} />}
     >
       <ReportFilters action="/relatorios/contratos-por-gestor" limparHref={filtrado ? "/relatorios/contratos-por-gestor" : undefined}>
-        <CampoSelect name="gestor" label="Gestor" options={opcoesGestor} vazio="Todos os gestores" defaultValue={lido.raw.gestor} error={erros.gestor} className="sm:w-72" />
+        <CampoSelect
+          name="gestor"
+          label="Gestor"
+          options={opcoesGestor}
+          vazio="Todos os gestores"
+          defaultValue={lido.raw.gestor}
+          error={erros.gestor}
+          className="sm:w-72"
+        />
         <CampoSelect
           name="departamentoId"
           label="UN Gestora"
@@ -69,7 +84,11 @@ export default async function ContratosPorGestorPage({ searchParams }: Props) {
             colunas={COLUNAS}
             linhas={resultado.linhas}
             chave={(l, i) => `${l.gestorCpf ?? ""}|${l.tipo ?? ""}|${l.unidade ?? ""}|${i}`}
-            rodape={resultado.linhas.length ? [resultado.totais.qtde, "Total", formatCurrency(resultado.totais.valorAcumulado), null, null] : undefined}
+            rodape={
+              resultado.linhas.length
+                ? [resultado.totais.qtde, "Total", formatCurrency(resultado.totais.valorAcumulado), null, null]
+                : undefined
+            }
           />
         </section>
       )}

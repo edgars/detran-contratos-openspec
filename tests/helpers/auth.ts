@@ -1,19 +1,30 @@
 import { prisma } from "@/lib/db";
 import { createSession } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
+import type { Perfil } from "@/lib/auth/permissions";
 import { resetCookies } from "./next-headers-mock";
 
 /**
- * Cria (ou reusa) um usuário e abre uma sessão para ele no cookie store de teste.
+ * Cria (ou reusa) um usuário com exatamente os `perfis` dados (padrão: Administrador, 023-perfis-acesso)
+ * e abre uma sessão para ele no cookie store de teste. `perfis = []` cria um usuário sem perfil.
  * Exige `vi.mock("next/headers", () => import("./helpers/next-headers-mock"))` no arquivo de teste.
  */
-export async function loginAs(username = "teste") {
+export async function loginAs(username = "teste", perfis: Perfil[] = ["ADMINISTRADOR"]) {
   resetCookies();
   const user =
     (await prisma.user.findUnique({ where: { username } })) ??
     (await prisma.user.create({ data: { username, passwordHash: await hashPassword("senha-de-teste") } }));
+  await setPerfis(user.id, perfis);
   await createSession(user.id);
   return user;
+}
+
+/** Troca os perfis do usuário direto no banco (sem passar pela API). */
+export async function setPerfis(userId: number, perfis: Perfil[]) {
+  await prisma.$transaction([
+    prisma.userPerfil.deleteMany({ where: { userId } }),
+    prisma.userPerfil.createMany({ data: perfis.map((perfil) => ({ userId, perfil })) }),
+  ]);
 }
 
 export function logout() {

@@ -9,6 +9,8 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import { lerParams } from "@/lib/relatorios/params";
 import { consultar, params } from "@/lib/relatorios/acerto-valor";
 import { cn } from "@/lib/utils";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,9 @@ function pagina(q: string | undefined, page: number) {
 
 /** Acerto de valor (019-relatorios; docs/legado/relatorios.md, tela `acertoValor`). Sem impressão nem CSV. */
 export default async function AcertoValorPage({ searchParams }: Props) {
+  // 023-perfis-acesso: a tela exige `acerto_valor:listar`.
+  const user = await guardPage("acerto_valor", "listar");
+  if (!user) return <SemPermissao />;
   const lido = lerParams(params, await searchParams);
   const erros = lido.ok ? {} : lido.errors;
   const resultado = lido.ok ? await consultar(lido.data) : null;
@@ -74,7 +79,10 @@ export default async function AcertoValorPage({ searchParams }: Props) {
                 <Link
                   href={pagina(q, resultado.page - 1)}
                   aria-disabled={resultado.page <= 1}
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), resultado.page <= 1 && "pointer-events-none opacity-50")}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    resultado.page <= 1 && "pointer-events-none opacity-50",
+                  )}
                 >
                   <ChevronLeft data-icon="inline-start" aria-hidden />
                   Anterior

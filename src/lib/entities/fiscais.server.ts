@@ -31,6 +31,7 @@ export function buscaWhere(params: URLSearchParams) {
 }
 
 export const fiscaisApi = crudHandlers({
+  resource: "fiscais", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.fiscal,
   schema: fiscaisSchema,
   searchFields: ["pessoaFisicaCpf"],

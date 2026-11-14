@@ -49,6 +49,7 @@ const prestacaoDelegate = (db: Db = prisma) => ({
 });
 
 export const prestacaoContasApi = crudHandlers({
+  resource: "prestacao_contas", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: prestacaoDelegate,
   schema: prestacaoContasSchema,
   searchFields: ["descricao", "atendido"],

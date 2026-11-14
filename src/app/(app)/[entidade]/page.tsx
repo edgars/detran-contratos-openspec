@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { NAV_ITEMS, findNavItem } from "@/lib/navigation";
+import { SemPermissao } from "@/components/sem-permissao";
+import { guardPage } from "@/lib/auth/guard";
 
 /**
  * Rota provisória de cada entidade da navegação. Cada change de entidade cria a sua rota
@@ -13,6 +15,7 @@ export default async function EntidadePendente({ params }: { params: Promise<{ e
   const { entidade } = await params;
   const item = findNavItem(entidade);
   if (!item) notFound();
+  if (!(await guardPage(item.resource, "listar"))) return <SemPermissao />; // 023-perfis-acesso
   return (
     <div className="space-y-2">
       <h1 className="text-2xl font-semibold">{item.label}</h1>

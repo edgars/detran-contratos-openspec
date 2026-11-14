@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/guard";
 import { handleError, readBody } from "@/lib/crud/server";
 import { gravarValorInicial } from "@/lib/relatorios/acerto-valor";
 
@@ -10,8 +10,8 @@ type Ctx = { params: Promise<{ id: string }> };
 /** Grava o valor inicial (019): corpo `{ valorInicial: "1.234,56" }`, só em contrato original sem valor. */
 export async function PUT(request: Request, { params }: Ctx) {
   try {
-    // Restrição por perfil fica para 023-perfis-acesso; aqui basta sessão válida.
-    await requireUser();
+    // 023-perfis-acesso: gravar o valor inicial é só do Administrador (`acerto_valor:editar`).
+    await requirePermission("acerto_valor", "editar");
     const { id: raw } = await params;
     const id = /^\d+$/.test(raw) ? Number(raw) : NaN;
     const salvo = Number.isSafeInteger(id) && id > 0 ? await gravarValorInicial(id, await readBody(request)) : null;

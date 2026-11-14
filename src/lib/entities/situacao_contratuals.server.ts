@@ -13,6 +13,7 @@ export const situacaoContratualsSchema = z.object({
  * `/api/situacao_contratual` (nome da tabela, usado pelo lookup de 017-contratos).
  */
 export const situacaoContratualsApi = crudHandlers({
+  resource: "cadastros", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.situacaoContratual,
   schema: situacaoContratualsSchema,
   searchFields: ["descricao"],

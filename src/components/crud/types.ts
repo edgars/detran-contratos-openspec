@@ -1,7 +1,8 @@
 /** Definições de tela usadas pelo kit de CRUD (lista e formulário de cada entidade). */
 
 /** `cpf`/`cnpj`: documento gravado só com dígitos, exibido com máscara (022-pessoas-fornecedores). */
-export type ColumnFormat = "text" | "date" | "currency" | "boolean" | "file" | "cpf" | "cnpj";
+/** `options`: valor (ou lista de valores) trocado pelo rótulo de `options`, separados por vírgula (023). */
+export type ColumnFormat = "text" | "date" | "currency" | "boolean" | "file" | "cpf" | "cnpj" | "options";
 
 export type ColumnDef = {
   key: string;
@@ -18,6 +19,8 @@ export type ColumnDef = {
    * cujo campo está em `sortFields` da entidade no servidor (024-kit-robustez).
    */
   sortable?: boolean;
+  /** Rótulos do formato `options`. */
+  options?: Option[];
 };
 
 export type Option = { value: string; label: string };
@@ -50,6 +53,7 @@ export type FieldKind =
   | "masked" // máscara # e A
   | "file" // PDF enviado em multipart
   | "password"
+  | "checkboxes" // várias opções fixas (Checkbox); envia uma lista (023-perfis-acesso)
   | "readonly";
 
 export type FieldDef = {

@@ -14,6 +14,7 @@ export const anexosPublicacaosSchema = z.object({
 });
 
 export const anexosPublicacaosApi = crudHandlers({
+  resource: "anexos_publicacaos", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
   delegate: (db: Db = prisma) => db.anexoPublicacao,
   schema: anexosPublicacaosSchema,
   fileFields: {
