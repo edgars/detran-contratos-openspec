@@ -187,6 +187,10 @@ model TipoContrato {
   nome                String?
   gerenciamento       String
   indicativoMetaRisco String     @default("N")
+  /// 021: tipo sujeito à prestação de contas ("S"/"N").
+  prestacaoContas     String     @default("N")
+  /// 019: tipo tratado como "Contrato" nos relatórios ("S"/"N").
+  contratoPrincipal   String     @default("N")
   contratos           Contrato[]
 
   @@map("tipo_contrato")
