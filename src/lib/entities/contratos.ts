@@ -13,13 +13,13 @@ export const contratos = {
   api: "/api/contratos",
   basePath: "/contratos",
   columns: [
-    { key: "numeroContrato", label: "Nº do contrato" },
+    { key: "numeroContrato", label: "Nº do contrato", sortable: true },
     { key: "numeroProcesso", label: "Nº do processo", secondary: true },
     { key: "objeto", label: "Objeto" },
     { key: "departamento", label: "Unidade gestora", path: "departamento.deDepartamento", secondary: true },
     { key: "prestadorServico", label: "Fornecedor", path: "prestadorServico.deRazaoSocial" },
-    { key: "dataTermino", label: "Data de vencimento", format: "date" },
-    { key: "valorTotal", label: "Valor total", format: "currency", align: "right" },
+    { key: "dataTermino", label: "Data de vencimento", format: "date", sortable: true },
+    { key: "valorTotal", label: "Valor total", format: "currency", align: "right", sortable: true },
     { key: "situacaoContratual", label: "Situação contratual", path: "situacaoContratual.descricao" },
   ] satisfies ColumnDef[],
   /** Filtros da lista (design.md › Filtros da lista): parâmetros de `GET /api/contratos`, nunca colunas. */
@@ -29,19 +29,6 @@ export const contratos = {
     { name: "gestor", label: "Gestor ou suplente", kind: "lookup", lookup: pessoaFisicaLookup },
     { name: "situacaoContratualId", label: "Situação contratual", kind: "lookup", lookup: { api: "/api/situacao_contratual", labelField: "descricao" } },
     { name: "vencendoEm", label: "Vencendo em (dias)", kind: "number" },
-    {
-      name: "sort",
-      label: "Ordenar por",
-      kind: "select",
-      options: [
-        { value: "dataTermino:asc", label: "Vencimento (mais próximo)" },
-        { value: "dataTermino:desc", label: "Vencimento (mais distante)" },
-        { value: "numeroContrato:asc", label: "Nº do contrato (A-Z)" },
-        { value: "numeroContrato:desc", label: "Nº do contrato (Z-A)" },
-        { value: "valorTotal:asc", label: "Valor total (menor)" },
-        { value: "valorTotal:desc", label: "Valor total (maior)" },
-      ],
-    },
   ] satisfies ListFilter[],
   fields: [
     { name: "numeroProcesso", label: "Nº do processo", kind: "text", required: true, section: "Identificação" },

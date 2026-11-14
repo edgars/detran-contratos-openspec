@@ -12,6 +12,11 @@ export type ColumnDef = {
   align?: "left" | "right";
   /** Coluna secundária: some em telas estreitas. */
   secondary?: boolean;
+  /**
+   * Cabeçalho clicável que ordena a lista por `key` (`sort=<key>:asc|desc`). Só para colunas
+   * cujo campo está em `sortFields` da entidade no servidor (024-kit-robustez).
+   */
+  sortable?: boolean;
 };
 
 export type Option = { value: string; label: string };
@@ -45,6 +50,8 @@ export type FieldDef = {
   section?: string;
   /** Largura no grid do formulário: "full" (linha inteira) ou "half" (metade em telas largas). */
   span?: "full" | "half";
+  /** Limite de caracteres (text/textarea/password/masked): aplica `maxLength` e mostra contador perto do limite. */
+  maxLength?: number;
 };
 
 export type ListFilter = {

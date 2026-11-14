@@ -118,4 +118,24 @@ describe("012-historicos", () => {
     expect((await item.GET(jsonRequest("/api/historicos/1"), idParams(1))).status).toBe(401);
     expect((await collection.POST(jsonRequest("/api/historicos", "POST", { contratoId: contratoA }))).status).toBe(401);
   });
+
+  // 024-kit-robustez › crud-kit › "Filtro de lista assíncrono"
+  it("Buscar históricos pelo número do contrato: só o histórico do contrato 123/2026", async () => {
+    const user = await loginAs();
+    const alvo = await prisma.contrato.create({ data: { objeto: "Alvo", numeroContrato: "123/2026" } });
+    const outro = await prisma.contrato.create({ data: { objeto: "Outro", numeroContrato: "999/2025" } });
+    await prisma.historico.create({ data: { contratoId: alvo.id, descricao: "do alvo", dataInclusao: new Date(), usuarioId: user.id } });
+    await prisma.historico.create({ data: { contratoId: outro.id, descricao: "de outro", dataInclusao: new Date(), usuarioId: user.id } });
+    const body = await (await collection.GET(jsonRequest(`/api/historicos?q=${encodeURIComponent("123/2026")}`))).json();
+    expect(body.items.map((h: { contratoId: number }) => h.contratoId)).toEqual([alvo.id]);
+    expect(body.items[0].contrato.numeroContrato).toBe("123/2026");
+  });
+
+  it("Parâmetro interno forjado: _q e _contratos são ignorados", async () => {
+    await loginAs();
+    const normal = await (await collection.GET(jsonRequest("/api/historicos?size=100"))).json();
+    const forjado = await (await collection.GET(jsonRequest("/api/historicos?size=100&_q=x&_contratos=1,2,3"))).json();
+    expect(forjado.total).toBe(normal.total);
+    expect(forjado.items.map((h: { id: number }) => h.id)).toEqual(normal.items.map((h: { id: number }) => h.id));
+  });
 });

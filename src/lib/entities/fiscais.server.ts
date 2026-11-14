@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { crudHandlers } from "@/lib/crud/server";
+import { crudHandlers, type Db } from "@/lib/crud/server";
 import { applyMask, MASKS } from "@/lib/mask";
 import { MSG, fiscalFields } from "@/lib/rules";
 import { maskedString, requiredInt, requiredString } from "@/lib/rules/fields";
@@ -27,7 +27,7 @@ export function buscaWhere(params: URLSearchParams) {
 }
 
 export const fiscaisApi = crudHandlers({
-  delegate: () => prisma.fiscal,
+  delegate: (db: Db = prisma) => db.fiscal,
   schema: fiscaisSchema,
   searchFields: ["pessoaFisicaCpf"],
   listWhere: buscaWhere,

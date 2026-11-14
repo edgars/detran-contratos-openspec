@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers, readBody, type RawBody } from "@/lib/crud/server";
+import { FieldRuleError, crudHandlers, readBody, type Db, type RawBody } from "@/lib/crud/server";
 import { pageResponse, parsePagination, validationError } from "@/lib/api/http";
 import { UnauthorizedError, requireUser } from "@/lib/auth/session";
 import { ANEXO_CONTRATO, ANEXO_FISCAL, ANEXO_PUBLICACAO, contratoFields } from "@/lib/rules";
-import { requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
-import type { AttachmentRule } from "@/lib/rules";
-import { UploadError, savePdf } from "@/lib/uploads";
+import { optionalString, requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
+import type { UploadSession } from "@/lib/uploads";
 import { toDecimal } from "@/lib/money";
 
 /**
@@ -21,10 +20,6 @@ import { toDecimal } from "@/lib/money";
 // ---------------------------------------------------------------------------------------------
 
 const isBlank = (v: unknown) => v === null || (typeof v === "string" && v.trim() === "");
-
-/** Texto opcional: vazio vira `null` (limpa na edição); ausente não altera. */
-const clearableString = () =>
-  z.preprocess((v) => (v === undefined ? undefined : isBlank(v) ? null : v), z.string().trim().nullish());
 
 /** Id de lookup opcional: vazio vira `null`; ids chegam como string do formulário. */
 const optionalId = (message: string) =>
@@ -66,19 +61,19 @@ export const contratosSchema = z.object({
   numeroContrato: requiredString("Informe o número do contrato"), // RK-04fd1cbfc346
   tipoContratoId: requiredInt("Informe o tipo de contrato"), // RK-79134600b4be
   modalidadeId: optionalId("Modalidade inválida"),
-  numeroModalidade: clearableString(),
+  numeroModalidade: optionalString(),
   objeto: contratoFields.objeto, // RK-879233539305 RK-ee6cd831c2d4 (aplicada em contratoFields)
   departamentoId: requiredInt("Informe o departamento(unidade gestora)"), // RK-a0660a4fb262
   prestadorServicoId: requiredInt("Informe o fornecedor"), // RK-37f294a3dc8e
-  pessoaFisicaId: clearableString(),
-  suplenteId: clearableString(),
+  pessoaFisicaId: optionalString(),
+  suplenteId: optionalString(),
   dataInicio: requiredDate("Informe a data de início"), // RK-6b2806cfff8d
   dataTermino: requiredDate("Informe a data de vencimento"), // RK-9d6599f5897d
   valorMensal: moneyInput("Valor mensal"),
   valorTotal: moneyInput("Valor total"),
   situacaoContratualId: optionalId("Situação contratual inválida"),
-  projetoBasico: clearableString(),
-  anexo: storedPdf(),
+  projetoBasico: optionalString(),
+  // `anexo` (coluna de contratos) é tratado pelo kit (fileFields); fica fora do schema.
   // Não são colunas de `contratos`: viram linhas de anexos_publicacao / anexos_fiscais (contratoDelegate).
   anexoPublicacao: storedPdf(),
   anexoFiscal: storedPdf(),
@@ -105,37 +100,25 @@ function convertMoney(data: Record<string, unknown>) {
   return data;
 }
 
-const FILE_RULES: Record<string, AttachmentRule> = {
-  anexo: ANEXO_CONTRATO, // RK-ed7bc4aaba15 — Erro ao incluir O arquivo anexo deve ser do tipo PDF!
-  anexoPublicacao: ANEXO_PUBLICACAO, // RK-295d296eb4f7 — anexo de publicação só PDF
-  anexoFiscal: ANEXO_FISCAL, // RK-b6f82ba63c1f — anexo fiscal só PDF
-};
-
 /**
- * Anexos do cadastro: cada arquivo enviado passa por `savePdf()` (assinatura `%PDF-`, limite,
- * gravação fora de public/) antes da validação; nada é gravado no banco se um deles falhar.
+ * Anexos do cadastro que não são colunas de `contratos` (viram linhas de anexos_publicacao /
+ * anexos_fiscais): gravados por `ctx.files.save`, então o rollback do kit os alcança se a
+ * gravação falhar (024-kit-robustez › D1). O `anexo` do próprio contrato é do `fileFields`.
  */
-async function prepareAnexos(raw: RawBody): Promise<RawBody> {
+async function prepareAnexos(raw: RawBody, files: UploadSession): Promise<RawBody> {
   const out: RawBody = { ...raw };
-  for (const [field, rule] of Object.entries(FILE_RULES)) {
+  for (const field of ["anexoPublicacao", "anexoFiscal"] as const) {
     if (!(field in out)) continue;
     const value = out[field];
-    if (value instanceof Blob) {
-      if (value.size === 0) {
-        delete out[field];
-        continue;
-      }
-      try {
-        // RK-ed7bc4aaba15 (anexo) RK-295d296eb4f7 (anexoPublicacao) RK-b6f82ba63c1f (anexoFiscal): só PDF.
-        out[field] = await savePdf(value, rule);
-      } catch (error) {
-        if (error instanceof UploadError) throw new FieldRuleError({ [field]: error.message });
-        throw error;
-      }
-    } else if (value === undefined || isBlank(value)) {
+    if (value instanceof Blob && value.size > 0) {
+      out[field] =
+        field === "anexoPublicacao"
+          ? await files.save(field, value, ANEXO_PUBLICACAO) // RK-295d296eb4f7 — anexo de publicação só PDF
+          : await files.save(field, value, ANEXO_FISCAL); // RK-b6f82ba63c1f — anexo fiscal só PDF
+    } else if (value === undefined || value instanceof Blob || isBlank(value)) {
       delete out[field];
     } else {
-      // Nome de arquivo informado direto no corpo: só vale o que `savePdf` gravou nesta requisição.
+      // Nome de arquivo informado direto no corpo: só vale o que foi gravado nesta requisição.
       throw new FieldRuleError({ [field]: "Envie o arquivo em PDF" });
     }
   }
@@ -167,15 +150,15 @@ async function saveContrato(id: number | null, { data, include }: ContratoArgs) 
   });
 }
 
-/** Delegate do kit: leitura direto do Prisma; criação/edição passam por `saveContrato`. */
-const contratoDelegate = {
-  findMany: (args: object) => prisma.contrato.findMany(args),
-  count: (args: object) => prisma.contrato.count(args),
-  findUnique: (args: object) => prisma.contrato.findUnique(args as Prisma.ContratoFindUniqueArgs),
-  delete: (args: object) => prisma.contrato.delete(args as Prisma.ContratoDeleteArgs),
+/** Delegate do kit: leitura e exclusão pelo cliente recebido (transação do kit); criação/edição por `saveContrato`. */
+const contratoDelegate = (db: Db = prisma) => ({
+  findMany: (args: object) => db.contrato.findMany(args),
+  count: (args: object) => db.contrato.count(args),
+  findUnique: (args: object) => db.contrato.findUnique(args as Prisma.ContratoFindUniqueArgs),
+  delete: (args: object) => db.contrato.delete(args as Prisma.ContratoDeleteArgs),
   create: (args: ContratoArgs) => saveContrato(null, args),
   update: (args: ContratoArgs & { where: { id: number } }) => saveContrato(args.where.id, args),
-};
+});
 
 export const contratoInclude = {
   departamento: { select: { id: true, deDepartamento: true } },
@@ -186,10 +169,15 @@ export const contratoInclude = {
 } satisfies Prisma.ContratoInclude;
 
 const crud = crudHandlers({
-  delegate: () => contratoDelegate,
+  delegate: contratoDelegate,
   schema: contratosSchema,
   include: contratoInclude,
-  prepare: (raw) => prepareAnexos(raw),
+  // RK-ed7bc4aaba15 — Erro ao incluir O arquivo anexo deve ser do tipo PDF! (anexo do contrato, opcional)
+  fileFields: { anexo: { rule: ANEXO_CONTRATO } },
+  // Filtros do legado (parâmetros de pesquisa, nunca colunas) e a busca `q`.
+  listWhere: (params) => contratosWhere(params),
+  sortFields: ["dataTermino", "numeroContrato", "valorTotal"],
+  prepare: (raw, ctx) => prepareAnexos(raw, ctx.files),
   beforeSave: (data, { mode, current }) => {
     convertMoney(data);
     const parentId = mode === "update" ? ((current as { parentId: number | null } | undefined)?.parentId ?? null) : null;
@@ -210,16 +198,6 @@ const positiveInt = (value: string | null) => {
   const n = Number.parseInt(value, 10);
   return n > 0 ? n : null;
 };
-
-const SORT_FIELDS = ["dataTermino", "numeroContrato", "valorTotal"] as const;
-
-/** `?sort=dataTermino:desc` (ou `sort=dataTermino&dir=desc`). Padrão: mais recentes primeiro. */
-export function contratosOrderBy(params: URLSearchParams): Prisma.ContratoOrderByWithRelationInput[] {
-  const [field, inlineDir] = (params.get("sort") ?? "").split(/[:.]/);
-  const dir = (inlineDir ?? params.get("dir") ?? "asc").toLowerCase() === "desc" ? "desc" : "asc";
-  if ((SORT_FIELDS as readonly string[]).includes(field)) return [{ [field]: dir }, { id: "desc" }];
-  return [{ id: "desc" }];
-}
 
 /** Filtros da lista: parâmetros de pesquisa do legado, nunca colunas. */
 export function contratosWhere(params: URLSearchParams, now = new Date()): Prisma.ContratoWhereInput | undefined {
@@ -245,28 +223,6 @@ export function contratosWhere(params: URLSearchParams, now = new Date()): Prism
 function unauthorized(error: unknown) {
   if (error instanceof UnauthorizedError) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   throw error;
-}
-
-async function list(request: Request) {
-  try {
-    await requireUser();
-  } catch (error) {
-    return unauthorized(error);
-  }
-  const params = new URL(request.url).searchParams;
-  const p = parsePagination(params);
-  const where = contratosWhere(params);
-  const [items, total] = await Promise.all([
-    prisma.contrato.findMany({
-      where,
-      orderBy: contratosOrderBy(params),
-      skip: (p.page - 1) * p.size,
-      take: p.size,
-      include: contratoInclude,
-    }),
-    prisma.contrato.count({ where }),
-  ]);
-  return pageResponse(items, total, p);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -336,7 +292,7 @@ async function createAditivo(request: Request, ctx: { params: Promise<{ id: stri
 }
 
 export const contratosApi = {
-  list,
+  list: crud.list,
   create: crud.create,
   get: crud.get,
   update: crud.update,

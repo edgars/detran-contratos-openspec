@@ -8,6 +8,10 @@ import * as aditivos from "@/app/api/contratos/[id]/aditivos/route";
 import * as pessoasFisicas from "@/app/api/pessoas_fisicas/route";
 import { contratos } from "@/lib/entities/contratos";
 import { formatCurrency } from "@/lib/format";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { uploadDir } from "@/lib/uploads";
 import { PDF_BYTES, PNG_BYTES, idParams, jsonRequest, loginAs, logout } from "./helpers/auth";
 
 // Spec 017-contratos: um teste por cenário, um por RK e 401 sem sessão.
@@ -502,5 +506,29 @@ describe("017-contratos", () => {
     expect((await item.DELETE(jsonRequest("/api/contratos/1", "DELETE"), idParams(1))).status).toBe(401);
     expect((await aditivos.GET(jsonRequest("/api/contratos/1/aditivos"), idParams(1))).status).toBe(401);
     expect((await aditivos.POST(jsonRequest("/api/contratos/1/aditivos", "POST", {}), idParams(1))).status).toBe(401);
+  });
+
+  // 024-kit-robustez › crud-kit › "Anexos desfeitos quando a gravação falha"
+  it("Segundo anexo inválido na mesma requisição: 400 em anexoPublicacao, nada gravado e UPLOAD_DIR com N arquivos", async () => {
+    await loginAs();
+    const original = process.env.UPLOAD_DIR;
+    process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), "contratos-024-"));
+    try {
+      const antes = await prisma.contrato.count();
+      const res = await collection.POST(
+        multipart("/api/contratos", {
+          ...valido({ numeroContrato: "ANX-024" }),
+          anexo: new File([PDF_BYTES], "contrato.pdf", { type: "application/pdf" }),
+          anexoPublicacao: new File([PNG_BYTES], "foto.png", { type: "image/png" }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).errors.anexoPublicacao).toBe("Erro ao incluir O arquivo anexo deve ser do tipo PDF!");
+      expect(await prisma.contrato.count()).toBe(antes);
+      expect(readdirSync(uploadDir())).toHaveLength(0);
+    } finally {
+      rmSync(uploadDir(), { recursive: true, force: true });
+      process.env.UPLOAD_DIR = original;
+    }
   });
 });

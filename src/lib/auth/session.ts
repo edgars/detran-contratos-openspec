@@ -6,11 +6,30 @@ export const SESSION_HOURS = 8;
 
 export type SessionUser = { id: number; username: string; superuser: number | null };
 
-/** Usuário sem nenhum campo de senha. Toda resposta de API que devolve usuário passa por aqui. */
-export function publicUser<T extends Record<string, unknown>>(user: T) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { passwordHash, password, passwordold, passwordnew, passwordconfirm, ...rest } = user;
-  return rest;
+export const SECRET_FIELDS = ["password", "passwordHash", "passwordold", "passwordnew", "passwordconfirm"] as const;
+const SECRETS = new Set<string>(SECRET_FIELDS);
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => {
+  if (v === null || typeof v !== "object") return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+};
+
+/**
+ * Remove os campos de senha em qualquer nível (objetos e arrays). `Date`, `Decimal`, `Buffer` e
+ * outras instâncias de classe não são percorridas: saem como estão, e o `toJSON` delas continua valendo.
+ */
+export function stripSecrets<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => stripSecrets(v)) as T;
+  if (!isPlainObject(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) if (!SECRETS.has(k)) out[k] = stripSecrets(v);
+  return out as T;
+}
+
+/** Usuário sem nenhum campo de senha (em qualquer nível). Toda resposta de API que devolve usuário passa por aqui. */
+export function publicUser<T extends Record<string, unknown>>(user: T): Omit<T, (typeof SECRET_FIELDS)[number]> {
+  return stripSecrets(user);
 }
 
 /**

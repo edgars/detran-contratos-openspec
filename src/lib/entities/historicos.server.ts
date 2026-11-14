@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { crudHandlers, FieldRuleError } from "@/lib/crud/server";
+import { crudHandlers, FieldRuleError, type Db } from "@/lib/crud/server";
 import { withAuthor } from "@/lib/auth/author";
 import { formatDate } from "@/lib/format";
 import { MSG } from "@/lib/rules";
@@ -26,16 +26,18 @@ type Row = Record<string, unknown> & {
 const include = { usuario: { select: { id: true, username: true } } };
 
 const crud = crudHandlers({
-  delegate: () => prisma.historico,
+  delegate: (db: Db = prisma) => db.historico,
   schema: historicosSchema,
   include,
-  // A busca `q` é resolvida em `list` (número do contrato) e chega aqui como `_contratos`.
-  listWhere: (params) => {
+  // Busca `q` pela descrição e pelo contrato (número do contrato, número do processo ou id),
+  // resolvida aqui (listWhere assíncrono, 024-kit-robustez › D6); sem parâmetros internos na URL.
+  listWhere: async (params, { q }) => {
     const filters: object[] = [];
-    if (params.has("_q")) {
-      const q = params.get("_q") ?? "";
-      const ids = (params.get("_contratos") ?? "").split(",").filter(Boolean).map(Number);
-      filters.push({ OR: [{ descricao: { contains: q } }, { contratoId: { in: ids } }] });
+    if (q) {
+      const or: object[] = [{ numeroContrato: { contains: q } }, { numeroProcesso: { contains: q } }];
+      if (/^\d+$/.test(q)) or.push({ id: Number(q) });
+      const contratos = await prisma.contrato.findMany({ where: { OR: or }, select: { id: true }, take: 1000 });
+      filters.push({ OR: [{ descricao: { contains: q } }, { contratoId: { in: contratos.map((c) => c.id) } }] });
     }
     const contratoId = Number.parseInt(params.get("contratoId") ?? "", 10);
     if (Number.isInteger(contratoId) && contratoId > 0) filters.push({ contratoId });
@@ -69,20 +71,7 @@ async function withContrato(res: Response): Promise<Response> {
 export const historicosApi = {
   ...crud,
   async list(request: Request) {
-    const url = new URL(request.url);
-    url.searchParams.delete("_q");
-    url.searchParams.delete("_contratos");
-    const q = (url.searchParams.get("q") ?? "").trim();
-    if (q) {
-      // Busca pelo contrato (número do contrato, número do processo ou id) e pela descrição.
-      const or: object[] = [{ numeroContrato: { contains: q } }, { numeroProcesso: { contains: q } }];
-      if (/^\d+$/.test(q)) or.push({ id: Number(q) });
-      const contratos = await prisma.contrato.findMany({ where: { OR: or }, select: { id: true }, take: 1000 });
-      url.searchParams.delete("q");
-      url.searchParams.set("_q", q);
-      url.searchParams.set("_contratos", contratos.map((c) => c.id).join(","));
-    }
-    return withContrato(await crud.list(new Request(url, { headers: request.headers })));
+    return withContrato(await crud.list(request));
   },
   async get(request: Request, ctx: { params: Promise<{ id: string }> }) {
     return withContrato(await crud.get(request, ctx));

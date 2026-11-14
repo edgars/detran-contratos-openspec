@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { crudHandlers } from "@/lib/crud/server";
+import { crudHandlers, type Db } from "@/lib/crud/server";
 import { tipoContratoFields } from "@/lib/rules";
 
 /** API de Tipos de contrato (003-tipo-contratos). Obrigatórios vêm das regras transversais da fundação. */
@@ -11,7 +11,7 @@ export const tipoContratosSchema = z.object({
 });
 
 export const tipoContratosApi = crudHandlers({
-  delegate: () => prisma.tipoContrato,
+  delegate: (db: Db = prisma) => db.tipoContrato,
   schema: tipoContratosSchema,
   searchFields: ["nome", "gerenciamento"],
   // Filtro da lista por gerenciamento (tasks 2.1): ?gerenciamento=S|N.

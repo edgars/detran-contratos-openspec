@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers } from "@/lib/crud/server";
+import { FieldRuleError, crudHandlers, type Db } from "@/lib/crud/server";
 import { MSG } from "@/lib/rules";
 import { optionalString, requiredInt } from "@/lib/rules/fields";
 import { withAuthor } from "@/lib/auth/author";
@@ -24,7 +24,7 @@ export const prestacaoContasSchema = z.object({
 });
 
 export const prestacaoContasApi = crudHandlers({
-  delegate: () => prisma.prestacaoConta,
+  delegate: (db: Db = prisma) => db.prestacaoConta,
   schema: prestacaoContasSchema,
   searchFields: ["descricao", "atendido"],
   orderBy: { id: "desc" },

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { crudHandlers, FieldRuleError } from "@/lib/crud/server";
+import { crudHandlers, FieldRuleError, type Db } from "@/lib/crud/server";
 import { withAuthor } from "@/lib/auth/author";
 import { contratoStatusFields, MSG } from "@/lib/rules";
 import { requiredInt } from "@/lib/rules/fields";
@@ -24,21 +24,14 @@ export const contratoStatusSchema = z.object({
 const OPTIONAL = ["descricao", "atendido"] as const;
 
 export const contratoStatusApi = crudHandlers({
-  delegate: () => prisma.contratoStatus,
+  delegate: (db: Db = prisma) => db.contratoStatus,
   schema: contratoStatusSchema,
-  // Busca `q` em listWhere: `atendido` é Int e não aceita `contains` ("sim"/"não" filtram por ele).
+  // `atendido` é Int: igualdade quando `q` é inteiro (kit, 024-kit-robustez › D7); "sim"/"não" viram 1/0.
+  searchFields: ["descricao", { field: "atendido", type: "int" }],
+  searchTerms: (q) => (/^sim$/i.test(q) ? [{ atendido: 1 }] : /^n[aã]o$/i.test(q) ? [{ atendido: 0 }] : []),
   listWhere: (params) => {
-    const filters: object[] = [];
-    const q = (params.get("q") ?? "").trim();
-    if (q) {
-      const or: object[] = [{ descricao: { contains: q } }];
-      if (/^(sim|1)$/i.test(q)) or.push({ atendido: 1 });
-      if (/^(n[aã]o|0)$/i.test(q)) or.push({ atendido: 0 });
-      filters.push({ OR: or });
-    }
     const contratoId = Number.parseInt(params.get("contratoId") ?? "", 10);
-    if (Number.isInteger(contratoId) && contratoId > 0) filters.push({ contratoId });
-    return filters.length ? { AND: filters } : undefined;
+    return Number.isInteger(contratoId) && contratoId > 0 ? { contratoId } : undefined;
   },
   orderBy: { id: "desc" },
   beforeSave: async (data, { user, mode }) => {

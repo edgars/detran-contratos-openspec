@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers, readBody } from "@/lib/crud/server";
+import { FieldRuleError, crudHandlers, readBody, type Db } from "@/lib/crud/server";
 import { validationError } from "@/lib/api/http";
 import { MSG, userFields, validatePasswordChange } from "@/lib/rules";
 import { requiredString } from "@/lib/rules/fields";
@@ -32,7 +32,7 @@ async function assertUniqueUsername(username: string, id?: number) {
 }
 
 export const usersApi = crudHandlers({
-  delegate: () => prisma.user,
+  delegate: (db: Db = prisma) => db.user,
   schema: usersCreateSchema,
   updateSchema: usersUpdateSchema,
   searchFields: ["username"],

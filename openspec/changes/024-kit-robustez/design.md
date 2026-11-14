@@ -36,6 +36,18 @@ Conferência do D10: `handleError` em `src/lib/crud/server.ts` (linhas 74–76) 
 
 - **Exclusão de contrato fica na 020** (ajuste de integração, 13/11/2026): esta change entrega só o gancho genérico `beforeDelete` e a remoção de arquivos depois do commit. A política de exclusão do contrato — o que bloqueia com `409` e o que é apagado junto — é definida por `020-contratos-complementos` › "Excluir Contratos" e prevalece sobre a tabela "Exclusão com beforeDelete" abaixo para a linha `contratos`.
 
+- **Adiantado para 020/021** (pedido do coordenador da onda 2, 13/11/2026, para 020 e 021 não editarem o kit em paralelo):
+  - `EntityList` › props opcionais `pageSize` (padrão 20; a API limita a 100) e `extraParams` (objeto de parâmetros fixos somados à query da lista, não exibidos como filtro) — usadas pela 021.
+  - `FieldDef.maxLength` (em `src/components/crud/types.ts`): aplica `maxLength` nos campos `text`, `textarea` e `password` e mostra um contador discreto (`n/máx`, com texto para leitor de tela) a partir de 80% do limite — usado pela 020.
+  - `EntityForm` › prop `deleteDescription` (texto do diálogo de exclusão; padrão: o aviso atual) — usada pela 020.
+- **`fileFields` saem do schema validado**: o kit tira do schema (`omit`) os campos de `fileFields` e os acrescenta a `data` depois da validação. Assim vale tanto para `anexos_fiscais` (que mantém `anexo: anexoFiscalFields.anexo` no schema exportado, com `RK-9da08201400b`/`RK-0e70b6c81ee9`) quanto para `anexos_publicacaos`/`penalidades` (campo fora do schema). Na API, a obrigatoriedade do anexo é o `required: true` de `fileFields`.
+- **Texto no lugar do arquivo → `400` no campo** ("Envie o arquivo em PDF"), como manda a tarefa 2.1. Antes, em `anexos_fiscais`, `anexos_publicacaos` e `penalidades`, o texto era ignorado em silêncio; os testes antigos que esperavam `200` foram atualizados (`tests/anexos_fiscais.test.ts` › "edição não aceita nome de arquivo…", `tests/anexos_publicacaos.test.ts` e `tests/penalidades.test.ts` › "Alterar um registro"). O formulário nunca envia texto em campo `file`, então a tela não muda.
+- **`searchTerms`** (acréscimo ao `CrudConfig`): termos extras somados ao `OR` da busca do kit. Usado por `contrato_status` para "sim"/"não" → `atendido` 1/0, que o design pede "somado ao `OR` do kit" — um `listWhere` entra com `AND` e não serviria.
+- **Ordenação da lista de contratos**: o select "Ordenar por" dos filtros de `/contratos` saiu; a ordenação passa a ser pelo cabeçalho (Nº do contrato, Data de vencimento, Valor total). A API continua aceitando `sort=campo&dir=desc`.
+- **`sort` na URL da página**: os outros filtros do `EntityList` não ficam na URL (só em estado); o `sort` é lido de `window.location` ao abrir e gravado com `history.replaceState`, sem `useSearchParams` (evita exigir `Suspense` nas páginas).
+- **Cópias de `clearableString`** também saíram de `modalidades.server.ts` e `situacao_contratuals.server.ts` (mesma semântica de `optionalString`). `pagamentos.server.ts` perdeu o laço `OPTIONAL_KEYS` (que transformava ausente em `null`): agora ausente não altera e vazio limpa; `mes`/`glosa` passaram a vazio → `null`. `status.periodo` passou a vazio → `null` (o bloco `OPTIONAL` saiu).
+- **`src/lib/rules/schemas.ts`** (fora da lista do proposal): `contratoStatusFields.descricao` faz `transform` sobre `optionalString()`; como agora pode vir `null`, o `transform` passou a ignorar `null` além de `undefined`.
+
 ### Capability: `crud-kit` nova + `security` modificada
 
 O comportamento do kit não está descrito em nenhuma spec: `app-shell` › "Convenções da API" fixa só o formato (`page`, `size`, `q`, `400` por campo), e `security` fixa só as garantias de segurança. Ganchos, busca, ordenação e campos apagáveis são comportamento comum de todas as entidades, mas não são segurança; colocá-los em `security` misturaria assuntos e tornaria a spec de segurança a dona de ordenação de lista. Por isso:
@@ -183,3 +195,6 @@ Sem mudança de código: teste em `tests/crud-kit.test.ts` com delegate falso cu
 
 - **Vínculos do contrato na exclusão** — o legado apagava `fiscais`, `historicos`, `pagamentos`, `penalidades`, `prestacao_contas` e `contrato_status` junto com o contrato? Proposta desta change: apagar só os anexos (publicação e fiscais) e bloquear com `409` quando houver os outros. Confirmar com o autor (ou pelo MCP da RNC, `getSourceFile` em `contratos_controller.php` › `remover`).
 - **Órfãos já existentes** — quantos PDFs sem referência existem hoje em `UPLOAD_DIR` no ambiente de homologação? Se houver, decidir se `026-producao` inclui uma rotina de limpeza.
+- **`npm run build` não rodado nesta aplicação** (o briefing da onda proíbe `next build` durante o trabalho em paralelo): a tarefa 7.2 fica aberta só por esse item; `tsc` e `eslint` passam.
+- **`contrato_status` ainda grava `null` em `descricao`/`atendido` ausentes no PUT** (bloco `OPTIONAL` dessa entidade, fora das tarefas desta change). Comportamento mantido; harmonizar com "ausente não altera" se o autor quiser.
+

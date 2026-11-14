@@ -8,8 +8,14 @@ const blankToUndefined = (v: unknown) => (v === null || (typeof v === "string" &
 export const requiredString = (message: string) =>
   z.preprocess(blankToUndefined, z.string({ error: message }).trim().min(1, { error: message }));
 
-/** Texto opcional: vazio vira `undefined`. */
-export const optionalString = () => z.preprocess(blankToUndefined, z.string().trim().optional());
+const isBlank = (v: unknown) => v === null || (typeof v === "string" && v.trim() === "");
+
+/**
+ * Texto opcional apagável (024-kit-robustez): vazio, só espaços ou `null` viram `null` (a coluna é
+ * limpa na gravação); ausente continua `undefined` (o valor gravado não muda).
+ */
+export const optionalString = () =>
+  z.preprocess((v) => (v === undefined ? undefined : isBlank(v) ? null : v), z.string().trim().nullish());
 
 /** Inteiro obrigatório (ids de lookup chegam como string do formulário). */
 export const requiredInt = (message: string) =>

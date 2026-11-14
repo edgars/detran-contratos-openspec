@@ -173,7 +173,9 @@ function FieldControl({
   const a11y = { "aria-invalid": invalid, "aria-describedby": describedBy, "aria-required": field.required || undefined };
   switch (field.kind) {
     case "textarea":
-      return <Textarea id={id} value={value} className="min-h-24" {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <Textarea id={id} value={value} className="min-h-24" maxLength={field.maxLength} {...a11y} onChange={(e) => onChange(e.target.value)} />
+      );
     case "select":
     case "lookup":
       return (
@@ -244,7 +246,17 @@ function FieldControl({
     case "file":
       return <FileControl id={id} value={value} file={file} invalid={invalid} describedBy={describedBy} onFile={onFile} />;
     case "password":
-      return <Input id={id} type="password" autoComplete="new-password" value={value} {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <Input
+          id={id}
+          type="password"
+          autoComplete="new-password"
+          value={value}
+          maxLength={field.maxLength}
+          {...a11y}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
     case "readonly":
       return (
         <p id={id} aria-labelledby={labelId} aria-describedby={describedBy} className="flex min-h-8 items-center text-sm tabular-nums break-words">
@@ -252,8 +264,21 @@ function FieldControl({
         </p>
       );
     default:
-      return <Input id={id} value={value} {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return <Input id={id} value={value} maxLength={field.maxLength} {...a11y} onChange={(e) => onChange(e.target.value)} />;
   }
+}
+
+/** Contador discreto de caracteres: só aparece a partir de 80% do limite. */
+function CharCounter({ field, value }: { field: FieldDef; value: string }) {
+  const max = field.maxLength;
+  if (!max || !["text", "textarea", "password"].includes(field.kind) || value.length < Math.floor(max * 0.8)) return null;
+  const restam = max - value.length;
+  return (
+    <p className={cn("text-right text-xs tabular-nums", restam === 0 ? "text-foreground" : "text-muted-foreground")} aria-live="polite">
+      {value.length.toLocaleString("pt-BR")}/{max.toLocaleString("pt-BR")}
+      <span className="sr-only">{restam === 0 ? " — limite atingido" : ` — restam ${restam} caracteres`}</span>
+    </p>
+  );
 }
 
 type Group = { title?: string; fields: FieldDef[] };
@@ -311,6 +336,7 @@ export function EntityForm({
   canDelete = true,
   afterSavePath,
   submitLabel,
+  deleteDescription,
 }: {
   title: string;
   api: string;
@@ -321,6 +347,8 @@ export function EntityForm({
   canDelete?: boolean;
   afterSavePath?: string;
   submitLabel?: string;
+  /** Texto do diálogo de exclusão (padrão: aviso de remoção definitiva). */
+  deleteDescription?: React.ReactNode;
 }) {
   const router = useRouter();
   const editing = id !== undefined;
@@ -453,7 +481,9 @@ export function EntityForm({
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>{subject ? `Excluir ${subject.noun}?` : "Excluir este registro?"}</AlertDialogTitle>
-                  <AlertDialogDescription>O registro será removido definitivamente. Esta ação não pode ser desfeita.</AlertDialogDescription>
+                  <AlertDialogDescription>
+                    {deleteDescription ?? "O registro será removido definitivamente. Esta ação não pode ser desfeita."}
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -518,6 +548,7 @@ export function EntityForm({
                           onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
                           onFile={(file) => setFiles((prev) => ({ ...prev, [f.name]: file }))}
                         />
+                        <CharCounter field={f} value={values[f.name] ?? ""} />
                         {f.description && <FieldDescription id={descId}>{f.description}</FieldDescription>}
                         {errors[f.name] && (
                           <FieldError id={errId} className="flex items-start gap-1.5">

@@ -1,7 +1,8 @@
 import { vi } from "vitest";
 vi.mock("next/headers", () => import("./helpers/next-headers-mock"));
-import { afterEach, describe, expect, it } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -14,7 +15,7 @@ import { crudHandlers } from "@/lib/crud/server";
 import { contratoStatusFields } from "@/lib/rules";
 import { ANEXO_FISCAL } from "@/lib/rules/attachments";
 import { BCRYPT_COST, hashPassword, verifyPassword } from "@/lib/auth/password";
-import { createSession, destroySession, getSessionUser } from "@/lib/auth/session";
+import { createSession, destroySession, getSessionUser, stripSecrets } from "@/lib/auth/session";
 import { SESSION_COOKIE } from "@/lib/auth/token";
 import { withAuthor } from "@/lib/auth/author";
 import { LOGIN_FAILED } from "@/lib/auth/login";
@@ -28,6 +29,10 @@ import * as arquivos from "@/app/api/arquivos/[nome]/route";
 import * as users from "@/app/api/users/route";
 import * as userItem from "@/app/api/users/[id]/route";
 import * as prestacoes from "@/app/api/prestacao_contas/route";
+import * as anexosFiscais from "@/app/api/anexos_fiscais/route";
+import * as anexoFiscalItem from "@/app/api/anexos_fiscais/[id]/route";
+import * as penalidades from "@/app/api/penalidades/route";
+import * as penalidadeItem from "@/app/api/penalidades/[id]/route";
 import { PDF_BYTES, PNG_BYTES, idParams, jsonRequest, loginAs, logout } from "./helpers/auth";
 import { getCookie } from "./helpers/next-headers-mock";
 
@@ -309,6 +314,76 @@ describe("001b-security-baseline", () => {
       const c = await prisma.contrato.create({ data: { objeto: "Decimal", valorInicial: a, valorMensal: b } });
       const lido = await prisma.contrato.findUniqueOrThrow({ where: { id: c.id } });
       expect(lido.valorInicial!.plus(lido.valorMensal!).toString()).toBe("0.3");
+    });
+  });
+
+  // 024-kit-robustez › security (MODIFIED/ADDED)
+  describe("PDF sem referência apagado do disco", () => {
+    const original = process.env.UPLOAD_DIR;
+    let contratoId: number;
+    const pdfFile = () => new File([PDF_BYTES], "a.pdf", { type: "application/pdf" });
+    const form = (url: string, method: string, fields: Record<string, string | Blob>) => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries(fields)) f.set(k, v);
+      return new Request(`http://localhost${url}`, { method, body: f });
+    };
+    beforeEach(async () => {
+      process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), "security-024-"));
+      contratoId = (await prisma.contrato.create({ data: { objeto: "Sec 024" } })).id;
+    });
+    afterEach(() => {
+      rmSync(uploadDir(), { recursive: true, force: true });
+      process.env.UPLOAD_DIR = original;
+    });
+
+    it("Upload recusado não deixa arquivo: PDF válido com formulário recusado → 400 e N arquivos", async () => {
+      await loginAs();
+      const n = uploadedFiles().length;
+      const res = await anexosFiscais.POST(form("/api/anexos_fiscais", "POST", { contratoId: "", anexo: pdfFile() }));
+      expect(res.status).toBe(400);
+      expect(uploadedFiles()).toHaveLength(n);
+    });
+
+    it("Troca de anexo: o antigo some do disco e o novo é servido pela URL do anexo", async () => {
+      await loginAs();
+      const criado = await (await penalidades.POST(form("/api/penalidades", "POST", { contratoId: String(contratoId), arquivo: pdfFile() }))).json();
+      const antigo = criado.arquivo as string;
+      const res = await penalidadeItem.PUT(form(`/api/penalidades/${criado.id}`, "PUT", { contratoId: String(contratoId), arquivo: pdfFile() }), idParams(criado.id));
+      expect(res.status).toBe(200);
+      const novo = (await res.json()).arquivo as string;
+      expect(existsSync(join(uploadDir(), antigo))).toBe(false);
+      expect((await arquivos.GET(jsonRequest(`/api/arquivos/${novo}`), nomeParams(novo))).status).toBe(200);
+      expect((await arquivos.GET(jsonRequest(`/api/arquivos/${antigo}`), nomeParams(antigo))).status).toBe(404);
+    });
+
+    it("Exclusão de registro com anexo: f.pdf some do disco e a URL do anexo responde 404", async () => {
+      await loginAs();
+      const criado = await (await anexosFiscais.POST(form("/api/anexos_fiscais", "POST", { contratoId: String(contratoId), anexo: pdfFile() }))).json();
+      const f = criado.anexo as string;
+      expect((await arquivos.GET(jsonRequest(`/api/arquivos/${f}`), nomeParams(f))).status).toBe(200);
+      expect((await anexoFiscalItem.DELETE(jsonRequest(`/api/anexos_fiscais/${criado.id}`, "DELETE"), idParams(criado.id))).status).toBe(204);
+      expect(existsSync(join(uploadDir(), f))).toBe(false);
+      expect((await arquivos.GET(jsonRequest(`/api/arquivos/${f}`), nomeParams(f))).status).toBe(404);
+    });
+  });
+
+  describe("Campos de senha removidos em qualquer nível", () => {
+    it("Usuário aninhado em outro registro: include do usuário completo, nenhum passwordHash na lista", async () => {
+      const eu = await loginAs("aninhado.024");
+      const contrato = await prisma.contrato.create({ data: { objeto: "Aninhado" } });
+      await prisma.historico.create({ data: { contratoId: contrato.id, descricao: "x", dataInclusao: new Date(), usuarioId: eu.id } });
+      const api = crudHandlers({ delegate: (db = prisma) => db.historico, schema: z.object({}), include: { usuario: true } });
+      const body = await (await api.list(jsonRequest("/api/historicos?size=100"))).json();
+      expect(body.items.length).toBeGreaterThan(0);
+      expect(body.items.some((h: { usuario?: { username: string } }) => h.usuario?.username === "aninhado.024")).toBe(true);
+      const texto = JSON.stringify(body);
+      for (const k of SECRET_KEYS) expect(texto).not.toContain(`"${k}"`);
+    });
+
+    it("stripSecrets preserva Decimal e Date: valorTotal continua serializado como antes", () => {
+      const row = { valorTotal: new Prisma.Decimal("1234.56"), data: new Date("2026-01-02T00:00:00Z"), u: [{ passwordHash: "h", id: 1 }] };
+      expect(JSON.stringify(stripSecrets(row))).toBe(JSON.stringify({ ...row, u: [{ id: 1 }] }));
+      expect(JSON.parse(JSON.stringify(stripSecrets(row))).valorTotal).toBe("1234.56");
     });
   });
 });

@@ -149,4 +149,13 @@ describe("002-departamentos", () => {
     expect((await collection.GET(jsonRequest("/api/departamentos"))).status).toBe(401);
     expect((await collection.POST(jsonRequest("/api/departamentos", "POST", { diretoriaId: dirA, deDepartamento: "X" }))).status).toBe(401);
   });
+
+  // 024-kit-robustez › crud-kit › "Campo opcional apagável na edição"
+  it("Campo ausente no corpo: PUT sem deBairro mantém Centro", async () => {
+    await loginAs();
+    const d = await prisma.departamento.create({ data: { deDepartamento: "Ausente", diretoriaId: dirA, deBairro: "Centro" } });
+    const res = await item.PUT(jsonRequest(`/api/departamentos/${d.id}`, "PUT", { diretoriaId: String(dirA), deDepartamento: "Ausente 2" }), idParams(d.id));
+    expect(res.status).toBe(200);
+    expect((await prisma.departamento.findUniqueOrThrow({ where: { id: d.id } })).deBairro).toBe("Centro");
+  });
 });

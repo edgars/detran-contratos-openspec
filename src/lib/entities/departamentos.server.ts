@@ -1,18 +1,11 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers } from "@/lib/crud/server";
+import { FieldRuleError, crudHandlers, type Db } from "@/lib/crud/server";
 import { MASKS, isMaskComplete } from "@/lib/mask";
 import { departamentoFields, MSG } from "@/lib/rules";
-import { requiredInt } from "@/lib/rules/fields";
+import { optionalString, requiredInt } from "@/lib/rules/fields";
 
 const blank = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
-
-/**
- * Texto opcional que pode ser apagado: vazio vira `null` (limpa a coluna na edição);
- * ausente continua `undefined` (não altera). `optionalString()` do kit não permite limpar.
- */
-const clearableString = () =>
-  z.preprocess((v) => (v === undefined ? undefined : blank(v) ? null : v), z.string().trim().nullish());
 
 /** CEP opcional; quando informado precisa completar a máscara `#####-###` (locale-and-formats). */
 const cep = z.preprocess(
@@ -25,18 +18,18 @@ const cep = z.preprocess(
 
 /** API de Departamentos (002-departamentos). */
 export const departamentosSchema = z.object({
-  codigo: clearableString(),
+  codigo: optionalString(),
   diretoriaId: requiredInt(MSG.obrigatorio("Diretoria")),
   deDepartamento: departamentoFields.deDepartamento, // RK-4e6358dbafbf RK-52fdc2d97389 RK-ecfa90099032 (aplicadas em departamentoFields)
-  deLogradouro: clearableString(),
-  deComplemento: clearableString(),
-  deBairro: clearableString(),
-  deCidade: clearableString(),
+  deLogradouro: optionalString(),
+  deComplemento: optionalString(),
+  deBairro: optionalString(),
+  deCidade: optionalString(),
   cep,
 });
 
 export const departamentosApi = crudHandlers({
-  delegate: () => prisma.departamento,
+  delegate: (db: Db = prisma) => db.departamento,
   schema: departamentosSchema,
   searchFields: ["deDepartamento", "codigo"],
   // Busca por diretoria (tasks 2.1): filtro da lista, nunca coluna nova.
