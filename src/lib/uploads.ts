@@ -66,12 +66,12 @@ export async function deleteStoredPdf(name: string): Promise<void> {
 }
 
 /**
- * Nome ainda referenciado por alguma coluna de anexo (`contratos.anexo`, `anexos_fiscais.anexo`,
+ * Nome ainda referenciado por alguma coluna de anexo (`contratos.anexo`, `contratos.projetoBasico`, `anexos_fiscais.anexo`,
  * `anexos_publicacao.anexo`, `penalidades.arquivo`): `commit()` não o apaga.
  */
 async function isReferenced(name: string): Promise<boolean> {
   const counts = await Promise.all([
-    prisma.contrato.count({ where: { anexo: name } }),
+    prisma.contrato.count({ where: { OR: [{ anexo: name }, { projetoBasico: name }] } }),
     prisma.anexoFiscal.count({ where: { anexo: name } }),
     prisma.anexoPublicacao.count({ where: { anexo: name } }),
     prisma.penalidade.count({ where: { arquivo: name } }),

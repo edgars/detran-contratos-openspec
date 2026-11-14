@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Banknote, FilePlus2, Gavel } from "lucide-react";
-import { prisma } from "@/lib/db";
+import { contratosVencendoAte, type ContratoVencendo } from "@/lib/entities/contratos.server";
 import { getSessionUser } from "@/lib/auth/session";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
@@ -13,51 +13,7 @@ const JANELA_VENCENDO = 30;
 const JANELA_VENCIDOS = 90;
 const LIMITE = 10;
 
-type Linha = {
-  id: number;
-  numeroContrato: string | null;
-  objeto: string;
-  fornecedor: string | null;
-  vencimento: Date;
-  dias: number;
-  valorTotal: { toString(): string } | null;
-};
-
-/**
- * Contratos originais cujo fim de vigência (o maior vencimento entre o contrato e seus aditivos)
- * cai até `limite`. Um contrato prorrogado por aditivo só conta pela data do aditivo.
- */
-async function contratosAte(limite: Date, hoje: number): Promise<Linha[]> {
-  const contratos = await prisma.contrato.findMany({
-    where: { parentId: null, dataTermino: { lte: limite } },
-    select: {
-      id: true,
-      numeroContrato: true,
-      objeto: true,
-      dataTermino: true,
-      valorTotal: true,
-      prestadorServico: { select: { deRazaoSocial: true } },
-      aditivos: { select: { dataTermino: true } },
-    },
-  });
-  return contratos.flatMap((c) => {
-    const datas = [c.dataTermino, ...c.aditivos.map((a) => a.dataTermino)].filter((d): d is Date => d != null);
-    if (datas.length === 0) return [];
-    const vencimento = new Date(Math.max(...datas.map((d) => d.getTime())));
-    if (vencimento > limite) return [];
-    return [
-      {
-        id: c.id,
-        numeroContrato: c.numeroContrato,
-        objeto: c.objeto,
-        fornecedor: c.prestadorServico?.deRazaoSocial ?? null,
-        vencimento,
-        dias: Math.round((vencimento.getTime() - hoje) / DAY),
-        valorTotal: c.valorTotal,
-      },
-    ];
-  });
-}
+type Linha = ContratoVencendo;
 
 function saudacao(hora: number) {
   if (hora < 12) return "Bom dia";
@@ -78,7 +34,8 @@ export default async function Home() {
   const now = new Date();
   // Vencimentos são gravados à meia-noite UTC do dia: compara pelo dia do servidor (como a lista).
   const hoje = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const linhas = await contratosAte(new Date(hoje + JANELA_VENCENDO * DAY), hoje);
+  // Vigência só pela data do próprio contrato (diretiva do autor 13/11/2026).
+  const linhas = await contratosVencendoAte(new Date(hoje + JANELA_VENCENDO * DAY), hoje);
   const vencendo = linhas.filter((l) => l.dias >= 0).sort((a, b) => a.dias - b.dias);
   const vencidos = linhas
     .filter((l) => l.dias < 0 && l.dias >= -JANELA_VENCIDOS)
@@ -120,7 +77,7 @@ export default async function Home() {
       <Secao
         id="vencendo"
         titulo="Vencendo nos próximos 30 dias"
-        descricao="Contratos cujo fim de vigência, já considerando aditivos, cai nos próximos 30 dias."
+        descricao="Contratos cujo vencimento (data do próprio contrato) cai nos próximos 30 dias."
         linhas={vencendo}
         vazio="Nenhum contrato vence nos próximos 30 dias."
         tom="vencendo"
@@ -129,7 +86,7 @@ export default async function Home() {
       <Secao
         id="vencidos"
         titulo="Vencidos"
-        descricao={`Vigência encerrada nos últimos ${JANELA_VENCIDOS} dias, sem aditivo que a prorrogue.`}
+        descricao={`Vencimento nos últimos ${JANELA_VENCIDOS} dias.`}
         linhas={vencidos}
         vazio={`Nenhum contrato venceu nos últimos ${JANELA_VENCIDOS} dias.`}
         tom="vencido"

@@ -165,3 +165,10 @@ describe("optionalCpf / requiredCpf", () => {
     expect(requiredCpf("obrigatório", "incompleto").safeParse("").error?.issues[0].message).toBe("obrigatório");
   });
 });
+
+// 020-contratos-complementos › tasks 1.3: limites de tamanho das telas do legado (sem RK).
+describe("020 › MSG.maximo", () => {
+  it('MSG.maximo("Objeto", 200) = "Objeto deve ter no máximo 200 caracteres"', () => {
+    expect(MSG.maximo("Objeto", 200)).toBe("Objeto deve ter no máximo 200 caracteres");
+  });
+});

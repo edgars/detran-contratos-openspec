@@ -1,5 +1,6 @@
 /**
- * Navegação principal: um item por entidade gerenciada (001-project-foundation › app-shell).
+ * Navegação principal: um item por entidade gerenciada (001-project-foundation › app-shell) e o
+ * item Relatórios (019-relatorios).
  * `name` é o nome da entidade na spec; `label` é o texto exibido; `change` diz qual change
  * entrega a lista da entidade.
  */
@@ -42,6 +43,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   { name: "Penalidades", label: "Penalidades", href: "/penalidades", change: "016-penalidades", group: "contratos" },
   { name: "Contratos", label: "Contratos", href: "/contratos", change: "017-contratos", group: "contratos" },
+  // 019-relatorios: um item só, que abre o índice dos seis relatórios.
+  { name: "Relatorios", label: "Relatórios", href: "/relatorios", change: "019-relatorios", group: "contratos" },
 ];
 
 export function findNavItem(slug: string): NavItem | undefined {
@@ -50,7 +53,7 @@ export function findNavItem(slug: string): NavItem | undefined {
 
 /** Ordem dentro de cada grupo (o mais usado primeiro). A ordem de NAV_ITEMS segue a das changes. */
 export const NAV_ORDER: readonly string[] = [
-  "Contratos", "Pagamentos", "Fiscais", "Penalidades", "PrestacaoContas", "ContratoStatus", "Historicos",
+  "Contratos", "Relatorios", "Pagamentos", "Fiscais", "Penalidades", "PrestacaoContas", "ContratoStatus", "Historicos",
   "AnexosFiscais", "AnexosPublicacaos",
   "Departamentos", "TipoContratos", "Modalidades", "SituacaoContratuals", "Fases", "Status",
   "Users",

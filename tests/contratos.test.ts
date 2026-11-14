@@ -200,7 +200,6 @@ describe("017-contratos", () => {
       valorMensal: "100,00",
       valorTotal: "1.200,00",
       situacaoContratualId: String(situacaoId),
-      projetoBasico: "Projeto",
     });
     const gravado = await prisma.contrato.findUniqueOrThrow({ where: { id: criado.id } });
     expect(gravado).toMatchObject({ numeroContrato: "VAL-001", tipoContratoId: tipoId, parentId: null });
@@ -224,6 +223,9 @@ describe("017-contratos", () => {
       "prestadorServicoId",
       "pessoaFisicaId",
       "suplenteId",
+      // 020-contratos-complementos: número de fiscais e Presidência depois do suplente.
+      "numeroFiscais",
+      "naPresidencia",
       "dataInicio",
       "dataTermino",
       "valorMensal",

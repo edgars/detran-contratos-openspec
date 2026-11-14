@@ -7,6 +7,10 @@ import { getContratoDetalhe } from "@/lib/entities/contratos.server";
 
 export const dynamic = "force-dynamic";
 
+/** Texto do diálogo de exclusão (020, design.md › Exclusão de contrato). */
+const EXCLUSAO =
+  "O contrato e seus anexos, andamentos, históricos e fiscais serão excluídos definitivamente. Esta ação não pode ser desfeita.";
+
 export default async function EditarContratoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const detalhe = /^\d+$/.test(id) ? await getContratoDetalhe(Number(id)) : null;
@@ -29,6 +33,7 @@ export default async function EditarContratoPage({ params }: { params: Promise<{
         fields={contratos.fields}
         id={id}
         submitLabel="Salvar contrato"
+        deleteDescription={EXCLUSAO}
       />
     </div>
   );

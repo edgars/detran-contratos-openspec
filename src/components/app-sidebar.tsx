@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CircleDot,
   ClipboardCheck,
+  FileChartColumn,
   FileText,
   Gavel,
   History,
@@ -45,6 +46,7 @@ import { cn } from "@/lib/utils";
 /** Um ícone por entidade (chave: `NavItem.name`). */
 const ICONS: Record<string, LucideIcon> = {
   Contratos: FileText,
+  Relatorios: FileChartColumn,
   Pagamentos: Banknote,
   Fiscais: ShieldCheck,
   Penalidades: Gavel,

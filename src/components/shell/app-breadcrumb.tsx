@@ -20,6 +20,13 @@ const FIXED: Record<string, string> = {
   new: "Novo",
   edit: "Editar",
   aditivos: "Aditivos",
+  // 019-relatorios: um rótulo fixo por relatório.
+  "contratos-por-gestor": "Contratos por gestor",
+  "contratos-vencendo": "Contratos vencendo",
+  "contratos-vencidos": "Contratos vencidos",
+  "cadastro-incompleto": "Cadastro incompleto",
+  "acompanhamento-meta": "Acompanhamento de meta",
+  "acerto-valor": "Acerto de valor",
 };
 
 /**

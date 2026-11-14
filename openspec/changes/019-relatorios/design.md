@@ -102,3 +102,24 @@ para vencer, Na Presidência (`naPresidencia = 1` → Sim, senão Não), Valor t
 - **Marcação `prestacaoContas`** — é da 021; se a 021 for descartada ou adiada, a coluna e o toggle precisam voltar para esta change.
 - **Regras RK** — docs/legado não associa nenhuma `RK-…` aos relatórios; conferir com `findRules` (módulo `relatorios`) no MCP da RNC e citar as que existirem.
 - **Perfil que grava o acerto de valor** — hoje qualquer sessão; no legado, a ação `acertoValor` estava liberada aos quatro grupos (docs/legado/perfis-acesso.md). Definir em 023.
+
+### Registro do apply (14/11/2026)
+
+- **Ordem real de aplicação** — aplicada depois de 024, 022 e 021 e em paralelo com a 020 (decisão do coordenador). A coluna `tipo_contrato.contratoPrincipal` e a migração `20261114022522_019_relatorios` já existiam (o `migration.sql` é o "redefine table" que o Prisma gera no SQLite, não um `ALTER TABLE` só; o efeito é o mesmo: coluna `TEXT NOT NULL DEFAULT 'N'`). Nenhuma migração nova nesta change.
+- **Dependência da 020 em andamento** — `projetoBasico` (texto, nome do PDF depois da 020) e `naPresidencia Int?` já estão no schema; os relatórios só leem as colunas (`cadastro-incompleto.ts`, `acompanhamento-meta.ts`). "Vazio" = `null` ou `""`; texto antigo de projeto básico ainda não zerado pela 020 conta como "tem projeto básico" até a migração dela rodar.
+- **MCP da RNC indisponível** (`RNC_MCP_URL` vazio) — tarefa 7.3 não executada: limites de dia, layout de `meta.ctp`, ordenações do vencendo, padrão de `dias` e grupo "Sem gestor" seguem as leituras deste design, sem conferência no fonte. Nenhuma `RK-…` citada (docs/legado não associa regra aos relatórios).
+- **Prefixo `'` contra fórmula só em texto** — o CSV aplica o prefixo às células de texto (razão social, objeto, nomes). Valores (`Decimal`), quantidades e datas que o próprio servidor formata não recebem `'`: um valor negativo (`-12,50`) viraria texto no Excel. Leitura mais provável do requisito (o risco é texto vindo do cadastro); confirmar.
+- **"Hoje" e o nome do CSV** — `hojeUtc()` usa o dia local do servidor (como a lista de contratos); o nome `<relatorio>-AAAA-MM-DD.csv` também usa a data local do servidor.
+- **`dias` sem padrão** — a tela de vencendo abre sem consulta (como vencidos) até o operador informar os dias; sem `dias` nenhuma tabela aparece.
+- **Período no vencendo com uma data só** — mensagem "Informe as duas datas do período" no campo que falta.
+- **Ordenação por gestor** — em memória pelo nome resolvido; contratos sem gestor ficam sempre por último (crescente ou decrescente), como na prestação de contas (021).
+- **"Sem gestor" por último** em Contratos por gestor; CPF sem pessoa aparece como "CPF formatado (não encontrado)" e forma o próprio grupo.
+- **Ordem das listas da meta** — Total e Em prorrogação/risco por vencimento crescente (o legado não documenta); Vencidos por contratada (legado).
+- **Acerto de valor** — valor negativo é recusado com a mesma mensagem de formato; id não numérico → 404. A gravação não registra autor (não há coluna para isso no contrato); fica para 023 se o autor quiser trilha.
+- **Componentes extras** — além dos quatro previstos, `src/components/relatorios/report-filters.tsx` (campos do formulário `method="get"`), `report-page.tsx` (moldura, avisos) e `colunas-contrato.tsx`; a lista do índice ficou em `src/lib/relatorios/indice.ts` (página do Next não pode exportar constantes). A rota usa um helper comum, `src/lib/relatorios/rota.ts`, e as colunas de vencendo/vencidos ficam em `linha-contrato.ts`.
+- **Folha de impressão genérica** — `src/app/globals.css` vale para qualquer página (a página do contrato da 020 também a usa): esconde menu lateral, cabeçalho (`print:hidden` no layout) e avisos; força tema claro; tabelas com cabeçalho repetido e linhas inteiras; `@page` A4 retrato com 12 mm. A parte compacta (9pt, linhas finas) fica escopada em `[data-print="relatorio"]`. Vencendo e vencidos declaram `@page { size: A4 landscape; margin: 10mm }` na própria página (conferido no Chromium: PDF 842×595 pt; por gestor sai 595×842). Firefox não conferido.
+
+### Conferência do coordenador (14/11/2026)
+- **Vence hoje:** respondido pelo código do legado (`relatorios_controller.php`, lido pelo MCP da RNC em 13/11): vigente é `TO_DAYS(data_termino) - TO_DAYS(now()) > 0` e vencido é `< 0`; o contrato que vence hoje não é nenhum dos dois — igual ao implementado.
+- **Layout de `meta.ctp`:** a leitura pelo MCP (`getSourceFile`) expirou sem resposta em 14/11; segue em aberto, com a disposição resumo + detalhe implementada.
+- **Tarefa 5.3:** conferida no Chromium (PDFs A4 paisagem/retrato); o Firefox não está disponível no ambiente de build — conferir em homologação.

@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers, readBody, type Db, type RawBody } from "@/lib/crud/server";
+import { ConflictError, FieldRuleError, crudHandlers, readBody, type Db, type RawBody } from "@/lib/crud/server";
 import { pageResponse, parsePagination, validationError } from "@/lib/api/http";
 import { UnauthorizedError, requireUser } from "@/lib/auth/session";
-import { ANEXO_CONTRATO, ANEXO_FISCAL, ANEXO_PUBLICACAO, contratoFields } from "@/lib/rules";
+import { ANEXO_CONTRATO, ANEXO_FISCAL, ANEXO_PUBLICACAO, MSG, contratoFields } from "@/lib/rules";
 import { optionalCpf, optionalString, requiredDate, requiredInt, requiredString } from "@/lib/rules/fields";
 import { onlyDigits } from "@/lib/documento";
 import { pessoasPorCpf } from "@/lib/reference/pessoas";
@@ -55,28 +55,62 @@ const moneyInput = (label: string) =>
 /** Nome gravado por `savePdf` (o `prepare` troca o arquivo enviado por ele). */
 const storedPdf = () => z.string().regex(/^[0-9a-f-]{36}\.pdf$/, { error: "Envie o arquivo em PDF" }).optional();
 
+// Limites das telas do legado (docs/legado/rk-conferencia.md): contados depois do trim; sem RK.
+const maximo = (campo: string, n: number) => z.string().max(n, { error: MSG.maximo(campo, n) });
+
+export const MSG_NUMERO_FISCAIS = "Número de fiscais inválido";
+export const MSG_NA_PRESIDENCIA = "Localizado na Presidência inválido";
+
+/**
+ * Número de fiscais (020, docs/legado/contratos-complementos.md): inteiro de 0 a 999 gravado como
+ * texto (coluna `String?` da fundação), sem zeros à esquerda; vazio vira `null`.
+ */
+const numeroFiscaisInput = z.preprocess(
+  (v) => (v === undefined ? undefined : isBlank(v) ? null : typeof v === "number" ? String(v) : typeof v === "string" ? v.trim() : v),
+  z
+    .string({ error: MSG_NUMERO_FISCAIS })
+    .regex(/^\d{1,3}$/, { error: MSG_NUMERO_FISCAIS })
+    .transform((v) => String(Number.parseInt(v, 10)))
+    .nullish(),
+);
+
+/**
+ * Localizado na Presidência (020): BOOLEAN `na_presidencia` do legado gravado como 1/0. Vazio (registro
+ * antigo com `null`, interruptor não tocado) vira 0; outro valor → 400.
+ */
+const naPresidenciaInput = z.preprocess(
+  (v) => (v === undefined ? undefined : isBlank(v) ? 0 : typeof v === "string" && /^[01]$/.test(v.trim()) ? Number(v.trim()) : v),
+  z.union([z.literal(0), z.literal(1)], { error: MSG_NA_PRESIDENCIA }).optional(),
+);
+
 // ---------------------------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------------------------
 
 export const contratosSchema = z.object({
-  numeroProcesso: requiredString("Informe o número do processo"), // RK-776d8b62d6df
-  numeroContrato: requiredString("Informe o número do contrato"), // RK-04fd1cbfc346
+  // Limites das telas do legado (docs/legado/rk-conferencia.md): processo/contrato 45, modalidade 12, objeto 200.
+  numeroProcesso: requiredString("Informe o número do processo").pipe(maximo("Nº do processo", 45)), // RK-776d8b62d6df
+  numeroContrato: requiredString("Informe o número do contrato").pipe(maximo("Nº do contrato", 45)), // RK-04fd1cbfc346
   tipoContratoId: requiredInt("Informe o tipo de contrato"), // RK-79134600b4be
   modalidadeId: optionalId("Modalidade inválida"),
-  numeroModalidade: optionalString(),
-  objeto: contratoFields.objeto, // RK-879233539305 RK-ee6cd831c2d4 (aplicada em contratoFields)
+  numeroModalidade: optionalString().pipe(maximo("Nº da modalidade", 12).nullish()),
+  // O limite de 200 vale só aqui; o `contratoFields.objeto` compartilhado não muda.
+  objeto: contratoFields.objeto.pipe(maximo("Objeto", 200)), // RK-879233539305 RK-ee6cd831c2d4 (aplicada em contratoFields)
   departamentoId: requiredInt("Informe o departamento(unidade gestora)"), // RK-a0660a4fb262
   prestadorServicoId: requiredInt("Informe o fornecedor"), // RK-37f294a3dc8e
   // CPF do gestor/suplente (022-pessoas-fornecedores, D5): com ou sem máscara, gravado com 11 dígitos.
   pessoaFisicaId: optionalCpf("Gestor"),
   suplenteId: optionalCpf("Gestor suplente"),
+  numeroFiscais: numeroFiscaisInput,
+  naPresidencia: naPresidenciaInput,
   dataInicio: requiredDate("Informe a data de início"), // RK-6b2806cfff8d
   dataTermino: requiredDate("Informe a data de vencimento"), // RK-9d6599f5897d
   valorMensal: moneyInput("Valor mensal"),
   valorTotal: moneyInput("Valor total"),
   situacaoContratualId: optionalId("Situação contratual inválida"),
-  projetoBasico: optionalString(),
+  // Projeto básico em PDF (020): tratado pelo kit (fileFields), que o tira do schema validado e
+  // recusa texto no corpo com "Envie o arquivo em PDF"; aqui fica a forma do valor gravado.
+  projetoBasico: storedPdf(),
   // `anexo` (coluna de contratos) é tratado pelo kit (fileFields); fica fora do schema.
   // Não são colunas de `contratos`: viram linhas de anexos_publicacao / anexos_fiscais (contratoDelegate).
   anexoPublicacao: storedPdf(),
@@ -206,7 +240,9 @@ const crud = crudHandlers({
   schema: contratosSchema,
   include: contratoInclude,
   // RK-ed7bc4aaba15 — Erro ao incluir O arquivo anexo deve ser do tipo PDF! (anexo do contrato, opcional)
-  fileFields: { anexo: { rule: ANEXO_CONTRATO } },
+  // Projeto básico (020): reaproveita a mensagem de RK-ed7bc4aaba15 (ANEXO_CONTRATO), sem RK própria
+  // (o legado documentado não traz mensagem para ele; design.md › Open Questions).
+  fileFields: { anexo: { rule: ANEXO_CONTRATO }, projetoBasico: { rule: ANEXO_CONTRATO } },
   // Filtros do legado (parâmetros de pesquisa, nunca colunas) e a busca `q`.
   listWhere: (params) => contratosWhere(params),
   sortFields: ["dataTermino", "numeroContrato", "valorTotal"],
@@ -218,10 +254,57 @@ const crud = crudHandlers({
     // RK-c3fbde6dbf4a — contrato original (sem parentId): valorInicial = valorTotal.
     // Num aditivo (parentId preenchido) valorInicial não é recalculado.
     if (parentId === null && data.valorTotal !== undefined) data.valorInicial = data.valorTotal;
-    if (mode === "create") data.dataInclusao = new Date(); // data do servidor
+    if (mode === "create") {
+      data.dataInclusao = new Date(); // data do servidor
+      data.naPresidencia ??= 0; // padrão desligado (020)
+    }
     return data;
   },
+  beforeDelete: (current, { tx, files }) => prepararExclusao(current as { id: number }, tx, files),
 });
+
+// ---------------------------------------------------------------------------------------------
+// Exclusão (020-contratos-complementos, design.md › Exclusão de contrato; padrão aceito pelo autor
+// em 14/11/2026). Roda na transação do kit (`beforeDelete`, 024): o kit apaga o contrato em seguida
+// e, depois do commit, os PDFs de `anexo` e `projetoBasico` (fileFields) e os agendados aqui.
+// ---------------------------------------------------------------------------------------------
+
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+/** "2 aditivos, 1 pagamento" — só os tipos com registros; `null` quando nada bloqueia. */
+export function vinculosQueBloqueiam(c: { aditivos: number; pagamentos: number; penalidades: number; prestacoes: number }): string | null {
+  const partes = [
+    c.aditivos && plural(c.aditivos, "aditivo", "aditivos"),
+    c.pagamentos && plural(c.pagamentos, "pagamento", "pagamentos"),
+    c.penalidades && plural(c.penalidades, "penalidade", "penalidades"),
+    c.prestacoes && plural(c.prestacoes, "prestação de contas", "prestações de contas"),
+  ].filter(Boolean);
+  return partes.length ? partes.join(", ") : null;
+}
+
+async function prepararExclusao(current: { id: number }, tx: Db, files: UploadSession) {
+  const contratoId = current.id;
+  // Bloqueiam: aditivos, pagamentos, penalidades e prestações de contas (nada é apagado).
+  const lista = vinculosQueBloqueiam({
+    aditivos: await tx.contrato.count({ where: { parentId: contratoId } }),
+    pagamentos: await tx.pagamento.count({ where: { contratoId } }),
+    penalidades: await tx.penalidade.count({ where: { contratoId } }),
+    prestacoes: await tx.prestacaoConta.count({ where: { contratoId } }),
+  });
+  if (lista) throw new ConflictError(`Não é possível excluir o contrato: há ${lista} vinculados. Exclua-os antes.`);
+  // Apagados junto: anexos de publicação e fiscais (PDFs saem do disco depois do commit), andamento,
+  // históricos e fiscais do contrato.
+  const [publicacoes, anexosFiscais] = [
+    await tx.anexoPublicacao.findMany({ where: { contratoId }, select: { anexo: true } }),
+    await tx.anexoFiscal.findMany({ where: { contratoId }, select: { anexo: true } }),
+  ];
+  for (const { anexo } of [...publicacoes, ...anexosFiscais]) files.discard(anexo);
+  await tx.anexoPublicacao.deleteMany({ where: { contratoId } });
+  await tx.anexoFiscal.deleteMany({ where: { contratoId } });
+  await tx.contratoStatus.deleteMany({ where: { contratoId } });
+  await tx.historico.deleteMany({ where: { contratoId } });
+  await tx.fiscal.deleteMany({ where: { contratoId } });
+}
 
 // ---------------------------------------------------------------------------------------------
 // Lista com os filtros do legado (design.md › Filtros da lista)
@@ -363,10 +446,11 @@ export async function getContratoDetalhe(id: number) {
     },
   });
   if (!contrato) return null;
-  const [pessoas, publicacoes, fiscais] = await Promise.all([
+  const [pessoas, publicacoes, fiscais, andamentos] = await Promise.all([
     pessoasPorCpf([contrato.pessoaFisicaId, contrato.suplenteId]),
     prisma.anexoPublicacao.findMany({ where: { contratoId: id }, orderBy: { id: "asc" } }),
     prisma.anexoFiscal.findMany({ where: { contratoId: id }, orderBy: { id: "asc" } }),
+    getAndamentos(id),
   ]);
   return {
     contrato,
@@ -375,5 +459,90 @@ export async function getContratoDetalhe(id: number) {
     fornecedor: contrato.prestadorServico ? rotuloFornecedor(contrato.prestadorServico) : null,
     publicacoes,
     fiscais,
+    andamentos,
   };
+}
+
+export type Andamento = {
+  id: number;
+  dataInclusao: Date | null;
+  status: string | null;
+  atendido: boolean;
+  descricao: string | null;
+  usuario: string | null;
+};
+
+/**
+ * Linha do tempo do andamento (020, `contratos/fluxo` do legado): registros de `contrato_status` do
+ * contrato, do mais recente para o mais antigo, com o nome do status e o usuário resolvidos em lote
+ * (sem FK, como gestor/suplente).
+ */
+export async function getAndamentos(contratoId: number): Promise<Andamento[]> {
+  const rows = await prisma.contratoStatus.findMany({ where: { contratoId }, orderBy: [{ dataInclusao: "desc" }, { id: "desc" }] });
+  const statusIds = [...new Set(rows.map((r) => r.statusId))];
+  const userIds = [...new Set(rows.map((r) => r.usuarioId).filter((v): v is number => v !== null))];
+  const [status, users] = await Promise.all([
+    statusIds.length ? prisma.status.findMany({ where: { id: { in: statusIds } }, select: { id: true, nome: true } }) : [],
+    userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } }) : [],
+  ]);
+  const nomeStatus = new Map(status.map((s) => [s.id, s.nome]));
+  const nomeUsuario = new Map(users.map((u) => [u.id, u.username]));
+  return rows.map((r) => ({
+    id: r.id,
+    dataInclusao: r.dataInclusao,
+    status: nomeStatus.get(r.statusId) ?? null,
+    atendido: r.atendido === 1,
+    descricao: r.descricao,
+    usuario: r.usuarioId === null ? null : (nomeUsuario.get(r.usuarioId) ?? null),
+  }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Painel Início
+// ---------------------------------------------------------------------------------------------
+
+const DAY = 86_400_000;
+
+export type ContratoVencendo = {
+  id: number;
+  numeroContrato: string | null;
+  objeto: string;
+  fornecedor: string | null;
+  vencimento: Date;
+  dias: number;
+  valorTotal: { toString(): string } | null;
+};
+
+/**
+ * Contratos originais (`parentId` vazio) cuja `dataTermino` cai até `limite`; `hoje` é a meia-noite
+ * UTC do dia do servidor (as datas são gravadas assim). `dias` < 0 = vencido.
+ */
+export async function contratosVencendoAte(limite: Date, hoje: number): Promise<ContratoVencendo[]> {
+  // Vigência só pela data do próprio contrato (diretiva do autor 13/11/2026): aditivos não contam.
+  const contratos = await prisma.contrato.findMany({
+    where: { parentId: null, dataTermino: { lte: limite } },
+    select: {
+      id: true,
+      numeroContrato: true,
+      objeto: true,
+      dataTermino: true,
+      valorTotal: true,
+      prestadorServico: { select: { deRazaoSocial: true } },
+    },
+  });
+  return contratos.flatMap((c) =>
+    c.dataTermino
+      ? [
+          {
+            id: c.id,
+            numeroContrato: c.numeroContrato,
+            objeto: c.objeto,
+            fornecedor: c.prestadorServico?.deRazaoSocial ?? null,
+            vencimento: c.dataTermino,
+            dias: Math.round((c.dataTermino.getTime() - hoje) / DAY),
+            valorTotal: c.valorTotal,
+          },
+        ]
+      : [],
+  );
 }
