@@ -1,20 +1,45 @@
 // Smoke test da aplicação no ar (001-project-foundation 6.1, 018-deployment 3.1).
 // Uso: BASE_URL=http://localhost:3000 SMOKE_USER=admin SMOKE_PASSWORD=... npm run smoke
 // SMOKE_CREATE=<nome> cria uma modalidade; SMOKE_ONLY_CHECK=<nome> só confere que ela existe (teste de reinício).
+// 026-producao: BASE_URL=https://<SITE_ADDRESS> passa pelo proxy e confere também o HSTS; SMOKE_INSECURE=1 aceita
+// certificado não confiável (CADDY_TLS=internal). Os cabeçalhos de segurança são conferidos em /login e num 401.
+if (process.env.SMOKE_INSECURE === "1") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const base = process.env.BASE_URL ?? "http://localhost:3000";
 const user = process.env.SMOKE_USER ?? process.env.ADMIN_USERNAME ?? "admin";
 const password = process.env.SMOKE_PASSWORD ?? process.env.ADMIN_PASSWORD;
 let failed = 0;
+let res;
 const log = (ok, msg) => {
   if (!ok) failed++;
   console.log(`${ok ? "ok  " : "FAIL"} ${msg}`);
 };
 
+/** Cabeçalhos de segurança da 026 (src/lib/security-headers.ts) e, por HTTPS, o HSTS do proxy. */
+function securityHeadersOk(res, onde) {
+  const h = res.headers;
+  const csp = h.get("content-security-policy") ?? "";
+  const checks = [
+    [/default-src 'self'/.test(csp) && /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/.test(csp), "CSP com nonce"],
+    [/object-src 'none'/.test(csp) && /base-uri 'self'/.test(csp) && /form-action 'self'/.test(csp) && /frame-ancestors 'self'/.test(csp), "CSP object-src/base-uri/form-action/frame-ancestors"],
+    [h.get("x-content-type-options") === "nosniff", "X-Content-Type-Options"],
+    [h.get("referrer-policy") === "strict-origin-when-cross-origin", "Referrer-Policy"],
+    [/camera=\(\)/.test(h.get("permissions-policy") ?? ""), "Permissions-Policy"],
+    [h.get("cross-origin-opener-policy") === "same-origin", "Cross-Origin-Opener-Policy"],
+  ];
+  if (base.startsWith("https://")) checks.push([h.get("strict-transport-security") === "max-age=31536000", "HSTS"]);
+  for (const [ok, nome] of checks) log(ok, `${onde}: ${nome}`);
+}
+
+res = await fetch(`${base}/login`);
+log(res.status === 200, `${res.status} /login`);
+securityHeadersOk(res, "/login");
+
 // Sem sessão: páginas vão para o login e a API responde 401.
-let res = await fetch(`${base}/contratos`, { redirect: "manual" });
+res = await fetch(`${base}/contratos`, { redirect: "manual" });
 log(res.status === 307 && res.headers.get("location")?.includes("/login"), `${res.status} /contratos sem sessão → /login`);
 res = await fetch(`${base}/api/contratos`);
 log(res.status === 401, `${res.status} /api/contratos sem sessão → 401`);
+securityHeadersOk(res, "401 /api/contratos");
 
 res = await fetch(`${base}/api/auth/login`, {
   method: "POST",

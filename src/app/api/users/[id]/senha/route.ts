@@ -12,7 +12,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   try {
     await requirePermission("users", "editar");
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
   return definirSenha(request, ctx);
 }

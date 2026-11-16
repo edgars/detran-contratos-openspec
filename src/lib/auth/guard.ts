@@ -1,5 +1,6 @@
 import { getSessionUser, requireUser, type SessionUser } from "./session";
 import { ForbiddenError, can, type Acao, type Recurso } from "./permissions";
+import { log } from "@/lib/log";
 
 /**
  * Checagem de permissão no servidor (023-perfis-acesso › security "Acesso negado responde 403").
@@ -28,5 +29,8 @@ export async function guardPage(recurso: Recurso, acao: Acao, ...outras: [Recurs
   const user = await getSessionUser();
   if (!user) return null;
   const opcoes: [Recurso, Acao][] = [[recurso, acao], ...outras];
-  return opcoes.some(([r, a]) => can(user, r, a)) ? user : null;
+  if (opcoes.some(([r, a]) => can(user, r, a))) return user;
+  // 026-producao: página negada também entra no log de segurança.
+  log("warn", "acesso.negado", { recurso, acao, userId: user.id, username: user.username });
+  return null;
 }

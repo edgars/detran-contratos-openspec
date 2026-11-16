@@ -17,7 +17,7 @@ export function referenceListHandler(table: ReferenceTable) {
       const { items, total } = await listReference(table, p, params);
       return pageResponse(items, total, p);
     } catch (error) {
-      return handleError(error);
+      return handleError(error, request);
     }
   };
 }

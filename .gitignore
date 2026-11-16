@@ -23,3 +23,8 @@ next-env.d.ts
 
 # 025-migracao-legado: dumps e anexos do legado copiados para a carga (dados pessoais; nunca versionar)
 import/
+
+# 026-producao: chave SSH do backup, certificados do órgão e estado das atualizações (nunca versionar)
+secrets/
+certs/
+ops/

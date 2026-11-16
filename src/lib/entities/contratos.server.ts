@@ -406,7 +406,7 @@ async function listAditivos(request: Request, ctx: { params: Promise<{ id: strin
   try {
     user = await requirePermission("contratos", "listar"); // 023-perfis-acesso
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
   const original = await findOriginal(ctx);
   if (!original) return notFound();
@@ -425,7 +425,7 @@ async function createAditivo(request: Request, ctx: { params: Promise<{ id: stri
   try {
     await requirePermission("contratos", "criar"); // 023-perfis-acesso: criar aditivo exige criar em contratos
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
   const original = await findOriginal(ctx);
   if (!original) return notFound();

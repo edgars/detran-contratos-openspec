@@ -173,6 +173,8 @@ describe("023 › matriz × handlers do kit (perfil isolado)", () => {
 
 /** Rotas só-sessão (sem recurso): login/logout/me e a troca da própria senha. */
 const SO_SESSAO = ["/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/conta/senha"];
+/** 026-producao: `GET /api/health` sem sessão e sem recurso (só status; exceção aceita pelo autor em 14/11/2026). */
+const SEM_SESSAO = ["/api/health"];
 const VERBOS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 /** Total de `route.ts` em src/app/api (conferido no disco). */
 const TOTAL_ROTAS = readdirSync("src/app/api", { recursive: true }).filter((f) => String(f).endsWith("route.ts")).length;
@@ -190,7 +192,7 @@ describe("023 › cobertura: toda rota da API checa permissão", () => {
     const sem: string[] = [];
     for (const arquivo of Object.keys(ROTAS)) {
       const api = caminho(arquivo);
-      if (SO_SESSAO.includes(api)) continue;
+      if (SO_SESSAO.includes(api) || SEM_SESSAO.includes(api)) continue;
       const fonte = readFileSync(arquivo.replace("../", ""), "utf8");
       const ok = /Api\.\w+|listFiscais|removeUser|requirePermission|referenceListHandler|rotaRelatorio/.test(fonte);
       if (!ok) sem.push(api);
@@ -212,7 +214,7 @@ describe("023 › cobertura: toda rota da API checa permissão", () => {
           body: verbo === "GET" || verbo === "DELETE" ? undefined : "{}",
         });
         const status = (await handler(req, ctx({ id: "1", nome: anexo }))).status;
-        if (SO_SESSAO.includes(api)) continue; // só sessão: o status depende do corpo, nunca da matriz
+        if (SO_SESSAO.includes(api) || SEM_SESSAO.includes(api)) continue; // só sessão: o status depende do corpo, nunca da matriz
         if (status !== 403) vazou.push(`${verbo} ${api}: ${status}`);
       }
       // A rota de login cria sessão nova: volta para o usuário sem perfil.

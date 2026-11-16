@@ -5,3 +5,6 @@ data
 .git
 openspec
 import
+secrets
+certs
+ops

@@ -11,6 +11,6 @@ export async function GET(request: Request) {
     await requirePermission("prestacao_contas", "listar"); // 023-perfis-acesso
     return NextResponse.json(await listarPrestacao(new URL(request.url).searchParams));
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
 }

@@ -18,6 +18,6 @@ export async function PUT(request: Request, { params }: Ctx) {
     if (!salvo) return NextResponse.json({ error: "Contrato não encontrado" }, { status: 404 });
     return NextResponse.json(salvo);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
 }

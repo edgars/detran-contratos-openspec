@@ -1,0 +1,4 @@
+# 026-producao: agenda do serviço `backup` (BusyBox crond, fuso de TZ). O horário do backup vem de BACKUP_HORARIO (padrão 0 2 * * *).
+# Saída das tarefas vai para o log do container (stdout do crond, PID 1).
+@BACKUP_HORARIO@ backup.sh >> /proc/1/fd/1 2>&1
+30 3 * * 0 testar-restauracao.sh >> /proc/1/fd/1 2>&1

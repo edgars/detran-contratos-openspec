@@ -1,0 +1,17 @@
+# 026-producao task 6.5: destino SSH de TESTE para a cópia externa (cenários "Envio normal" e "Destino fora do ar").
+# Nunca use em produção. Na pasta do repositório:
+#   docker compose -f docker-compose.yml -f docker/backup/testes/compose.remoto.yml up -d --build destino
+#   docker compose run --rm --no-deps backup ssh-keyscan destino > secrets/backup/known_hosts
+#   BACKUP_REMOTE=backup@destino:/destino no .env  →  docker compose up -d backup
+services:
+  destino:
+    build: ./docker/backup/testes/destino
+    volumes:
+      - ${BACKUP_SECRETS_DIR:-./secrets/backup}/id_ed25519.pub:/chave.pub:ro
+      - destino_ssh:/etc/ssh
+      - destino_dados:/destino
+    networks: [interna]
+
+volumes:
+  destino_ssh:
+  destino_dados:

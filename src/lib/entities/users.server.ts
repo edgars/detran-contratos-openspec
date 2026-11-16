@@ -139,7 +139,7 @@ export async function removeUser(request: Request, ctx: { params: Promise<{ id: 
       return NextResponse.json({ error: USERS_MSG.proprioUsuario }, { status: 409 });
     }
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
   return usersApi.remove(request, ctx);
 }
@@ -202,6 +202,6 @@ export async function definirSenha(request: Request, ctx: { params: Promise<{ id
     });
     return NextResponse.json({ ok: true, id: alvo.id, username: alvo.username });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
 }

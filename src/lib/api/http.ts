@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ZodError } from "zod";
+import { log } from "@/lib/log";
 
 /** Contrato de paginação de toda lista: `page` (1..n), `size` (1..100) e busca `q`. */
 export type Pagination = { page: number; size: number; q: string };
@@ -38,4 +39,27 @@ export function fieldErrors(error: ZodError): FieldErrors {
 /** Resposta padrão de validação: `400` com uma mensagem por campo. */
 export function validationError(error: ZodError) {
   return NextResponse.json({ errors: fieldErrors(error) }, { status: 400 });
+}
+
+/** Contexto de log de uma rota: caminho e método da requisição (quando a rota os tem). */
+export type RotaCtx = { rota?: string; metodo?: string; userId?: number; username?: string };
+
+/** Caminho e método de um `Request`, para o log. */
+export function rotaDe(request?: Request): RotaCtx {
+  if (!request) return {};
+  try {
+    return { rota: new URL(request.url).pathname, metodo: request.method };
+  } catch {
+    return { metodo: request.method };
+  }
+}
+
+/**
+ * Erro não tratado de uma rota de API (026-producao › Logs estruturados): `500` sem detalhe interno na
+ * resposta e uma linha `level: "error"`, `evento: "erro.interno"` com rota, método e o erro (nome e
+ * mensagem; pilha só com `LOG_LEVEL=debug`).
+ */
+export function internalError(error: unknown, ctx: RotaCtx = {}) {
+  log("error", "erro.interno", { ...ctx, status: 500, erro: error instanceof Error ? error : { message: String(error) } });
+  return NextResponse.json({ error: "Erro interno. Tente de novo; se persistir, avise o suporte." }, { status: 500 });
 }

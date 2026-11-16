@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { pageResponse, parsePagination, validationError, type FieldErrors } from "@/lib/api/http";
+import { internalError, pageResponse, parsePagination, rotaDe, validationError, type FieldErrors } from "@/lib/api/http";
+import { log } from "@/lib/log";
 import { UnauthorizedError, requireUser, stripSecrets, type SessionUser } from "@/lib/auth/session";
 import { ForbiddenError, MSG_SEM_PERMISSAO, can, type Recurso } from "@/lib/auth/permissions";
 import type { AttachmentRule } from "@/lib/rules/attachments";
@@ -104,9 +105,20 @@ export async function readBody(request: Request): Promise<RawBody> {
 const prismaCode = (error: unknown) =>
   error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : undefined;
 
-export function handleError(error: unknown) {
-  if (error instanceof UnauthorizedError) return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
-  if (error instanceof ForbiddenError) return NextResponse.json({ error: MSG_SEM_PERMISSAO }, { status: 403 });
+/**
+ * Resposta de erro de toda rota de API. 026-producao: `request` (opcional) entra no log; `403` loga
+ * `acesso.negado`, `400` de upload loga `upload.recusado` (em `savePdf`), e erro não tratado vira
+ * `500` sem detalhe na resposta com `erro.interno` no log (`internalError`, `src/lib/api/http.ts`).
+ */
+export function handleError(error: unknown, request?: Request) {
+  if (error instanceof UnauthorizedError) {
+    log("info", "sessao.invalida", { ...rotaDe(request), status: 401 });
+    return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
+  }
+  if (error instanceof ForbiddenError) {
+    log("warn", "acesso.negado", { ...rotaDe(request), status: 403 });
+    return NextResponse.json({ error: MSG_SEM_PERMISSAO }, { status: 403 });
+  }
   if (error instanceof FieldRuleError) return NextResponse.json({ errors: error.errors }, { status: 400 });
   if (error instanceof UploadError) {
     return NextResponse.json({ errors: { [error.field ?? "_"]: error.message } }, { status: 400 });
@@ -119,7 +131,7 @@ export function handleError(error: unknown) {
   if (prismaCode(error) === "P2002") {
     return NextResponse.json({ error: "Já existe um registro com esse valor" }, { status: 409 });
   }
-  throw error;
+  return internalError(error, rotaDe(request));
 }
 
 const parseId = (value: string) => {
@@ -191,6 +203,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
         // O cliente não escolhe o nome gravado: só vale o arquivo enviado nesta requisição.
         throw new FieldRuleError({ [field]: "Envie o arquivo em PDF" });
       } else if (mode === "create" && required) {
+        log("warn", "upload.recusado", { motivo: "ausente", campo: field });
         throw new UploadError(rule.missing, field);
       }
       // Edição sem arquivo novo: a coluna não entra no update e mantém o valor de `current`.
@@ -259,7 +272,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
         ]);
         return pageResponse(items.map(out), total, p);
       } catch (error) {
-        return handleError(error);
+        return handleError(error, request);
       }
     },
     /** `POST /api/<entidade>` */
@@ -267,11 +280,11 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
       try {
         return await save(request, "create");
       } catch (error) {
-        return handleError(error);
+        return handleError(error, request);
       }
     },
     /** `GET /api/<entidade>/:id` */
-    async get(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+    async get(request: Request, ctx: { params: Promise<{ id: string }> }) {
       try {
         const user = await requireUser();
         const out = readerFor(user);
@@ -281,7 +294,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
         if (!row) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });
         return NextResponse.json(out(row));
       } catch (error) {
-        return handleError(error);
+        return handleError(error, request);
       }
     },
     /** `PUT /api/<entidade>/:id` */
@@ -291,11 +304,11 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
         if (!id) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });
         return await save(request, "update", id);
       } catch (error) {
-        return handleError(error);
+        return handleError(error, request);
       }
     },
     /** `DELETE /api/<entidade>/:id` — em transação, com `beforeDelete`; anexos apagados depois do commit. */
-    async remove(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+    async remove(request: Request, ctx: { params: Promise<{ id: string }> }) {
       try {
         const user = await authorize("excluir");
         const id = parseId((await ctx.params).id);
@@ -311,7 +324,7 @@ export function crudHandlers<S extends z.ZodObject>(config: CrudConfig<S>) {
         await files.commit();
         return new NextResponse(null, { status: 204 });
       } catch (error) {
-        return handleError(error);
+        return handleError(error, request);
       }
     },
   };

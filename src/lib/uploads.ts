@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import type { AttachmentRule } from "@/lib/rules/attachments";
+import { log } from "@/lib/log";
 
 /** Pasta dos anexos, fora de `public/`. */
 export function uploadDir(): string {
@@ -32,13 +33,18 @@ const STORED_NAME = /^[0-9a-f-]{36}\.pdf$/;
  * basta), aplica `UPLOAD_MAX_MB` e grava fora de `public/` com nome gerado.
  * Devolve o nome gravado, que é o valor salvo na coluna do anexo.
  */
-export async function savePdf(file: unknown, rule: AttachmentRule): Promise<string> {
-  if (!(file instanceof Blob) || file.size === 0) throw new UploadError(rule.missing);
+export async function savePdf(file: unknown, rule: AttachmentRule, field?: string): Promise<string> {
+  // 026-producao: toda recusa vira uma linha `upload.recusado` no log (motivo e campo, nunca o conteúdo).
+  const recusar = (motivo: string, message: string) => {
+    log("warn", "upload.recusado", { motivo, campo: field, tamanho: file instanceof Blob ? file.size : undefined });
+    return new UploadError(message, field);
+  };
+  if (!(file instanceof Blob) || file.size === 0) throw recusar("ausente", rule.missing);
   if (file.size > uploadMaxBytes()) {
-    throw new UploadError(`O arquivo passa do limite de ${uploadMaxBytes() / 1024 / 1024} MB`);
+    throw recusar("limite", `O arquivo passa do limite de ${uploadMaxBytes() / 1024 / 1024} MB`);
   }
   const bytes = Buffer.from(await file.arrayBuffer());
-  if (bytes.subarray(0, 5).toString("latin1") !== "%PDF-") throw new UploadError(rule.notPdf);
+  if (bytes.subarray(0, 5).toString("latin1") !== "%PDF-") throw recusar("nao_pdf", rule.notPdf);
   const name = `${randomUUID()}.pdf`;
   await mkdir(uploadDir(), { recursive: true });
   await writeFile(join(uploadDir(), name), bytes);
@@ -100,7 +106,7 @@ export class UploadSession {
 
   async save(field: string, file: unknown, rule: AttachmentRule): Promise<string> {
     try {
-      const name = await savePdf(file, rule);
+      const name = await savePdf(file, rule, field);
       this.saved.push(name);
       return name;
     } catch (error) {
