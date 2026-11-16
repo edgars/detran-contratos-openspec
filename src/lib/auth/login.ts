@@ -14,7 +14,8 @@ export async function authenticate(username: string, password: string) {
   dummyHash ??= hashPassword("senha-inexistente");
   const hash = user?.passwordHash ?? (await dummyHash);
   const ok = await verifyPassword(password, hash);
-  if (!user || !ok || user.inativo) return null;
+  // 025-migracao-legado: usuário carregado do legado (senhaRedefinir) não entra até o Administrador definir a senha.
+  if (!user || !ok || user.inativo || user.senhaRedefinir) return null;
   await prisma.user.update({ where: { id: user.id }, data: { ultimoLogin: new Date() } });
   return user;
 }

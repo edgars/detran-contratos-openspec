@@ -20,6 +20,8 @@ const FIXED: Record<string, string> = {
   new: "Novo",
   edit: "Editar",
   aditivos: "Aditivos",
+  // 025-migracao-legado: /users/[id]/senha.
+  senha: "Definir senha",
   // 019-relatorios: um rótulo fixo por relatório.
   "contratos-por-gestor": "Contratos por gestor",
   "contratos-vencendo": "Contratos vencendo",

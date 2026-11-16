@@ -92,9 +92,13 @@ async function assertProprioAdministrador(user: SessionUser, id: number | undefi
   if (atual) throw new ConflictError(USERS_MSG.proprioAdministrador);
 }
 
-/** `perfis` sai como lista de códigos (`["FISCAL", "FINANCEIRO"]`), na ordem do catálogo. */
+/**
+ * `perfis` sai como lista de códigos (`["FISCAL", "FINANCEIRO"]`), na ordem do catálogo. `senhaRedefinir`
+ * (025-migracao-legado) não sai: não é segredo, mas não é editável por esta API.
+ */
 function serializeUser(row: unknown) {
-  const r = row as Record<string, unknown> & { perfis?: { perfil: string }[] };
+  const { senhaRedefinir: _naoEditavel, ...r } = row as Record<string, unknown> & { perfis?: { perfil: string }[] };
+  void _naoEditavel;
   const perfis = PERFIS.filter((p) => (r.perfis ?? []).some((x) => x.perfil === p));
   return publicUser({ ...r, perfis });
 }
@@ -167,4 +171,37 @@ export async function trocarSenha(request: Request) {
   if (Object.keys(errors).length) return NextResponse.json({ errors }, { status: 400 });
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(parsed.data.passwordnew) } });
   return NextResponse.json({ ok: true });
+}
+
+/** Definir senha e ativar (025-migracao-legado › users): só `password` e `passwordconfirm`. */
+const definirSenhaSchema = z
+  .object({
+    password: userFields.password, // RK-3e9d7e57ae65 RK-38821207df73 (aplicada em userFields)
+    passwordconfirm: requiredString(MSG.obrigatorio("Confirmar senha")),
+  })
+  .strict();
+
+/**
+ * `POST /api/users/:id/senha` — o Administrador (023: `users:editar`, só do perfil Administrador) define a
+ * senha de outro usuário, em geral um usuário carregado do legado sem senha: grava só o hash,
+ * `senhaRedefinir = false` e `inativo = 0`. A resposta não traz senha nem hash.
+ */
+export async function definirSenha(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    await requirePermission("users", "editar");
+    const raw = (await ctx.params).id;
+    const id = /^\d+$/.test(raw) ? Number(raw) : null;
+    const alvo = id === null ? null : await prisma.user.findUnique({ where: { id }, select: { id: true, username: true } });
+    if (!alvo) return NextResponse.json({ error: "Registro não encontrado" }, { status: 404 });
+    const parsed = definirSenhaSchema.safeParse(await readBody(request));
+    if (!parsed.success) return validationError(parsed.error);
+    if (parsed.data.password !== parsed.data.passwordconfirm) throw new FieldRuleError({ passwordconfirm: USERS_MSG.confirmacao });
+    await prisma.user.update({
+      where: { id: alvo.id },
+      data: { passwordHash: await hashPassword(parsed.data.password), senhaRedefinir: false, inativo: 0 },
+    });
+    return NextResponse.json({ ok: true, id: alvo.id, username: alvo.username });
+  } catch (error) {
+    return handleError(error);
+  }
 }

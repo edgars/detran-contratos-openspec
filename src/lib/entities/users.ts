@@ -40,3 +40,18 @@ export const usersTrocaSenha = {
     { name: "passwordconfirm", label: "Confirmar nova senha", kind: "password", required: true },
   ] satisfies FieldDef[],
 };
+
+/** Tela /users/[id]/senha (025-migracao-legado): o Administrador define a senha e ativa o usuário. */
+export const usersDefinirSenha = {
+  title: "Definir senha",
+  fields: [
+    { name: "password", label: "Nova senha", kind: "password", required: true, description: "A senha com que o usuário passará a entrar." },
+    {
+      name: "passwordconfirm",
+      label: "Confirmar senha",
+      kind: "password",
+      required: true,
+      description: "Digite a mesma senha outra vez, exatamente igual.",
+    },
+  ] satisfies FieldDef[],
+};

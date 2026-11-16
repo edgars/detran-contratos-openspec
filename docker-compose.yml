@@ -13,5 +13,20 @@ services:
       - dados:/app/data
     restart: unless-stopped
 
+  # 025-migracao-legado: carga do legado. Só existe com o perfil `migracao` (não sobe com `docker compose up`):
+  #   docker compose --profile migracao run --rm migrar --origem /import/contratos.sql --origem /import/global.sql --anexos /import/anexos --simular
+  migrar:
+    build:
+      context: .
+      target: migrar
+    profiles: ["migracao"]
+    env_file: .env
+    environment:
+      DATABASE_URL: "file:/app/data/app.db"
+      UPLOAD_DIR: "/app/data/uploads"
+    volumes:
+      - dados:/app/data
+      - ./import:/import:ro
+
 volumes:
   dados:

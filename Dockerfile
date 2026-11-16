@@ -13,6 +13,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate && npm run build
 
+# 025-migracao-legado: carga do legado (`docker compose --profile migracao run --rm migrar …`).
+# Fica ANTES do estágio `run`, que continua o último (o serviço `app` não declara target). Parte de `deps`
+# (node_modules com devDependencies: tsx e a CLI do Prisma) mais o código; não precisa do `next build`.
+FROM deps AS migrar
+WORKDIR /app
+COPY . .
+RUN npx prisma generate
+# Aplica as migrações versionadas (o banco pode ser o do volume ou outro, por DATABASE_URL) e roda a carga.
+ENTRYPOINT ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema ./prisma/schema.prisma >&2 && exec node_modules/.bin/tsx scripts/migrar.ts \"$@\"", "migrar"]
+
 FROM node:22-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
