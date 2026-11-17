@@ -56,8 +56,8 @@
 
 ## 8. CI
 
-- [ ] 8.1 Criar `.github/workflows/ci.yml` com os jobs `verificar` e `imagem` de design.md › CI (versão do `@fission-ai/openspec` fixada; `OPENSPEC_TELEMETRY=0`; `.env` de CI gerado no job). Verificação: `npx -y @action-validator/cli .github/workflows/ci.yml` (ou `actionlint`) sem erro; execução no GitHub verde num PR (cenário *Pull request válido*).
-- [ ] 8.2 Cenário *Pull request com teste quebrado*: num branch descartável, um teste falhando faz `verificar` falhar e `imagem` não rodar. Verificação: link da execução no PR; branch apagado depois.
+- [x] 8.1 Criar `.github/workflows/ci.yml` com os jobs `verificar` e `imagem` de design.md › CI (versão do `@fission-ai/openspec` fixada; `OPENSPEC_TELEMETRY=0`; `.env` de CI gerado no job). Verificação: `npx -y @action-validator/cli .github/workflows/ci.yml` (ou `actionlint`) sem erro; execução no GitHub verde num PR (cenário *Pull request válido*). Feito em 17/11/2026: execução verde na PR #5, https://github.com/edgars/detran-contratos-openspec/actions/runs/44008242833 (`verificar` e `imagem` passaram, depois da correção do manifesto vazio em `testar-restauracao.sh`).
+- [x] 8.2 Cenário *Pull request com teste quebrado*: num branch descartável, um teste falhando faz `verificar` falhar e `imagem` não rodar. Verificação: link da execução no PR; branch apagado depois. Feito em 17/11/2026: branch `ci/teste-quebrado-descartavel`, https://github.com/edgars/detran-contratos-openspec/actions/runs/44008238726 (`verificar` falhou em `tests/ci-quebrado.test.ts`, `imagem` pulado); branch apagado.
 
 ## 9. Ambiente e runbook
 
@@ -67,5 +67,5 @@
 
 ## 10. Verificação final
 
-- [ ] 10.1 Um teste automatizado ou verificação registrada por `#### Scenario:` de `specs/producao/spec.md`, `specs/deployment/spec.md` e `specs/security/spec.md`. Verificação: lista cenário → teste/comando no PR.
+- [x] 10.1 Um teste automatizado ou verificação registrada por `#### Scenario:` de `specs/producao/spec.md`, `specs/deployment/spec.md` e `specs/security/spec.md`. Verificação: lista cenário → teste/comando no PR. Lista cenário → teste/comando na PR #5; os cenários de CI ficaram verificados com 8.1 e 8.2.
 - [x] 10.2 `npm test`, `npm run lint`, `npx tsc --noEmit`, `npm run build` e `OPENSPEC_TELEMETRY=0 npx -y @fission-ai/openspec@latest validate 026-producao --strict` passam.
