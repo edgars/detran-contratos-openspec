@@ -50,7 +50,8 @@ done
 
 # Manifesto dos anexos mais recente.
 MANIFESTO="$(ls -1 "$BACKUPS_DIR"/manifestos/uploads-*.sha256 2>/dev/null | LC_ALL=C sort | tail -n 1)"
-if [ -n "$MANIFESTO" ]; then
+# Manifesto vazio (instalação nova, sem anexos) é válido: o sha256sum recusaria um arquivo sem linhas.
+if [ -n "$MANIFESTO" ] && [ -s "$MANIFESTO" ]; then
   (cd "$BACKUPS_DIR/uploads" && sha256sum -c --quiet "$MANIFESTO" > "$TRAB/manifesto.err" 2>&1) \
     || falha "manifesto $(basename "$MANIFESTO") não confere: $(head -n 3 "$TRAB/manifesto.err" | tr '\n' ' ')"
 fi
