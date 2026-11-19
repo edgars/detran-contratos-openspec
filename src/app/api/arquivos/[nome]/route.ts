@@ -8,7 +8,7 @@ import { readStoredPdf } from "@/lib/uploads";
 const naoEncontrado = () => NextResponse.json({ error: "Arquivo não encontrado" }, { status: 404 });
 
 /** Download de anexo, só para sessão válida (001b) com `ver` no registro dono do arquivo (023). */
-export async function GET(_request: Request, { params }: { params: Promise<{ nome: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ nome: string }> }) {
   try {
     await requireUser();
     const { nome } = await params;
@@ -21,6 +21,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ nom
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${nome}"` },
     });
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
 }

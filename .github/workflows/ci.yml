@@ -1,0 +1,100 @@
+# 026-producao › Integração contínua: em todo push e pull request, lint, tipos, testes, build do Next.js,
+# openspec validate e, se tudo passar, as imagens app e backup com um ciclo de backup e teste de restauração.
+# Sem segredos do repositório e sem publicar imagem (CD fora de escopo).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  OPENSPEC_TELEMETRY: "0"
+  OPENSPEC_VERSION: "2.0.0"
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+      - name: openspec validate --all --strict
+        run: npx -y "@fission-ai/openspec@${OPENSPEC_VERSION}" validate --all --strict
+
+  imagem:
+    needs: verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_VERSION: ci
+      # Projeto e .env descartáveis do job (gerado abaixo, valores aleatórios).
+      COMPOSE_PROJECT_NAME: detranci
+      ENV_FILE: ci.env
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build da imagem do app
+        run: docker build --build-arg APP_VERSION=${{ github.sha }} -t detran-contratos:ci .
+      - name: Build da imagem do backup
+        run: docker build -t detran-contratos-backup:ci docker/backup
+      - name: docker compose config (.env.example)
+        run: ENV_FILE=.env.example docker compose --env-file .env.example config -q
+      - name: .env de CI (descartável, sem segredos do repositório)
+        run: |
+          {
+            echo "ENV_FILE=ci.env"
+            echo "APP_VERSION=ci"
+            echo "AUTH_SECRET=$(openssl rand -base64 32)"
+            echo "APP_ORIGIN=https://localhost"
+            echo "SITE_ADDRESS=localhost"
+            echo "CADDY_TLS=internal"
+            echo "UPLOAD_MAX_MB=10"
+            echo "PROXY_MAX_BODY_MB=11"
+            echo "LOG_LEVEL=info"
+            echo "BACKUP_REMOTE="
+          } > ci.env
+          mkdir -p secrets/backup certs
+      - name: Testes dos scripts de backup (retenção e cópia corrompida)
+        run: |
+          docker compose --env-file ci.env run --rm --no-deps -T backup /usr/local/share/backup-testes/retencao.test.sh
+          docker compose --env-file ci.env run --rm --no-deps -T backup /usr/local/share/backup-testes/corrompido.test.sh
+      - name: Sobe app e backup (HTTP interno) e espera healthy
+        run: |
+          docker compose --env-file ci.env up -d --no-build app backup
+          for _ in $(seq 1 60); do
+            st="$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose --env-file ci.env ps -q app)")"
+            echo "app: $st"; [ "$st" = "healthy" ] && exit 0; sleep 3
+          done
+          docker compose --env-file ci.env logs app; exit 1
+      - name: Usuário do processo do app é o uid 1000
+        run: test "$(docker compose --env-file ci.env exec -T app id -u)" = "1000"
+      - name: Backup e teste de restauração
+        run: |
+          set +e
+          docker compose --env-file ci.env exec -T backup backup.sh --motivo ci; cod=$?
+          set -e
+          # 3 = backup local íntegro sem cópia externa (BACKUP_REMOTE vazio no CI)
+          test "$cod" -eq 0 -o "$cod" -eq 3
+          docker compose --env-file ci.env exec -T backup testar-restauracao.sh | tee restauracao.log
+          grep -q '"evento":"restauracao.teste.ok"' restauracao.log
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose --env-file ci.env logs --tail 100
+      - name: Derruba a stack
+        if: always()
+        run: docker compose --env-file ci.env down -v

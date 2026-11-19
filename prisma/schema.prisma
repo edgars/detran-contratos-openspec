@@ -141,20 +141,22 @@ model Group {
 
 /// Usuários (tabela de 005-users; criada em 001b-security-baseline por causa do passwordHash).
 model User {
-  id           Int         @id @default(autoincrement())
-  username     String      @unique
-  passwordHash String
-  created      DateTime?   @default(now())
-  modified     DateTime?   @updatedAt
+  id             Int          @id @default(autoincrement())
+  username       String       @unique
+  passwordHash   String
+  created        DateTime?    @default(now())
+  modified       DateTime?    @updatedAt
   /// Obrigatório no legado; opcional aqui até a relação com `pessoas` ser confirmada.
-  pessoaId     Int?
-  superuser    Int?
-  inativo      Int?
-  ultimoLogin  DateTime?
-  sessions     Session[]
-  historicos   Historico[] @relation("HistoricoUsuario")
+  pessoaId       Int?
+  superuser      Int?
+  inativo        Int?
+  ultimoLogin    DateTime?
+  sessions       Session[]
+  historicos     Historico[]  @relation("HistoricoUsuario")
   /// Perfis de acesso (023-perfis-acesso); um usuário pode ter mais de um.
-  perfis       UserPerfil[]
+  perfis         UserPerfil[]
+  /// 025-migracao-legado: usuário carregado do legado sem senha conhecida; não entra até o Administrador definir a senha.
+  senhaRedefinir Boolean      @default(false)
 
   @@map("users")
 }
@@ -393,4 +395,34 @@ model MigracaoPendencia {
 
   @@index([origem, resolvidoEm])
   @@map("migracao_pendencias")
+}
+
+/// Histórico das execuções da carga do legado (025-migracao-legado, design.md D11).
+model MigracaoExecucao {
+  id           Int       @id @default(autoincrement())
+  iniciadoEm   DateTime  @default(now())
+  concluidoEm  DateTime?
+  simulacao    Boolean
+  /// "em_andamento" | "concluida" | "concluida_com_rejeicoes" | "abortada"
+  situacao     String
+  /// SHA-256 dos arquivos de origem, concatenados em ordem.
+  origemSha256 String
+  /// JSON do relatório de conferência (design.md D8).
+  relatorio    String?
+
+  @@map("migracao_execucoes")
+}
+
+/// Anexos do legado já importados (025-migracao-legado, design.md D6): idempotência dos arquivos.
+model MigracaoArquivo {
+  id            Int      @id @default(autoincrement())
+  /// Basename normalizado (minúsculas) do valor da coluna do legado.
+  caminhoLegado String   @unique
+  sha256        String
+  /// Nome gerado por savePdf().
+  nomeGravado   String
+  tamanho       Int
+  criadoEm      DateTime @default(now())
+
+  @@map("migracao_arquivos")
 }

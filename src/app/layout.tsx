@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -9,11 +10,13 @@ export const metadata: Metadata = {
   description: "Gestão de contratos administrativos do DETRAN-RJ",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // 026-producao: nonce do CSP desta requisição (gerado no middleware) para o script inline do next-themes.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className="antialiased">
-        <ThemeProvider>
+        <ThemeProvider nonce={nonce}>
           <TooltipProvider>
             {children}
             <Toaster richColors position="top-right" />

@@ -4,3 +4,7 @@ data
 .env
 .git
 openspec
+import
+secrets
+certs
+ops

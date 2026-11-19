@@ -15,6 +15,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (!fluxo) return NextResponse.json({ error: "Contrato não encontrado" }, { status: 404 });
     return NextResponse.json(fluxo);
   } catch (error) {
-    return handleError(error);
+    return handleError(error, request);
   }
 }

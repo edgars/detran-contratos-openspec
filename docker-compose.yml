@@ -1,17 +1,115 @@
-# 018-deployment: a aplicação inteira com um comando (`docker compose up --build`).
-# Next.js serve frontend e API no mesmo processo; o SQLite é um arquivo no volume `dados`.
+# Produção num único servidor (026-producao; antes 018-deployment): `docker compose up -d --build`.
+# Só o `proxy` (Caddy, HTTPS) publica portas; o `app` (Next.js: frontend + API, SQLite no volume `dados`)
+# fica na rede interna; o `backup` agenda backup, retenção, cópia externa e teste de restauração.
+# Runbook: docs/operacao.md. Variáveis: .env (modelo em .env.example, seção "Produção").
+
+# Rotação dos logs de todos os serviços pelo Docker (10 MB × 5 arquivos).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# O mesmo .env serve à interpolação deste arquivo e ao ambiente dos serviços. ENV_FILE troca o arquivo
+# (ex.: homologação com --env-file /caminho/.env, que define ENV_FILE=/caminho/.env).
+x-env-file: &env_file
+  - path: ${ENV_FILE:-.env}
+    required: true
+
 services:
+  proxy:
+    # Caddy 2.11.9 (caddy:2-alpine), fixado por digest.
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?defina SITE_ADDRESS no .env}
+      CADDY_TLS: ${CADDY_TLS:?defina CADDY_TLS no .env}
+      # A diretiva `email` do Caddyfile exige argumento; o valor só é usado com ACME.
+      ACME_EMAIL: ${ACME_EMAIL:-nao-configurado@localhost.invalid}
+      PROXY_MAX_BODY_MB: ${PROXY_MAX_BODY_MB:-11}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ${CERTS_DIR:-./certs}:/certs:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [interna]
+    restart: unless-stopped
+    logging: *logging
+
   app:
-    build: .
-    env_file: .env
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: detran-contratos:${APP_VERSION:-dev}
+    env_file: *env_file
     environment:
       DATABASE_URL: "file:/app/data/app.db"
       UPLOAD_DIR: "/app/data/uploads"
-    ports:
-      - "${PORT:-3000}:3000"
+      PROXY_MAX_BODY_MB: ${PROXY_MAX_BODY_MB:-11}
+      # TZ do .env é do cron do `backup`; o app segue em UTC como na 018 (design.md › Topologia).
+      TZ: UTC
+    expose:
+      - "3000"
     volumes:
       - dados:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Cobre o `prisma migrate deploy` do start.
+      start_period: 60s
+    networks: [interna]
     restart: unless-stopped
+    logging: *logging
+
+  backup:
+    build: ./docker/backup
+    image: detran-contratos-backup:${APP_VERSION:-dev}
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      BACKUP_HORARIO: ${BACKUP_HORARIO:-0 2 * * *}
+      BACKUP_RETENCAO_DIARIA: ${BACKUP_RETENCAO_DIARIA:-14}
+      BACKUP_RETENCAO_MENSAL: ${BACKUP_RETENCAO_MENSAL:-6}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-}
+      BACKUP_SSH_PORTA: ${BACKUP_SSH_PORTA:-}
+    volumes:
+      - dados:/data
+      - backups:/backups
+      - ${BACKUP_SECRETS_DIR:-./secrets/backup}:/run/secrets/backup:ro
+    networks: [interna]
+    restart: unless-stopped
+    logging: *logging
+
+  # 025-migracao-legado: carga do legado. Só existe com o perfil `migracao` (não sobe com `docker compose up`):
+  #   docker compose --profile migracao run --rm migrar --origem /import/contratos.sql --origem /import/global.sql --anexos /import/anexos --simular
+  migrar:
+    build:
+      context: .
+      target: migrar
+    profiles: ["migracao"]
+    env_file: *env_file
+    environment:
+      DATABASE_URL: "file:/app/data/app.db"
+      UPLOAD_DIR: "/app/data/uploads"
+    volumes:
+      - dados:/app/data
+      - ./import:/import:ro
+    networks: [interna]
+    logging: *logging
+
+networks:
+  interna:
+    driver: bridge
 
 volumes:
   dados:
+  backups:
+  caddy_data:
+  caddy_config:

@@ -89,6 +89,11 @@ cp .env.example .env
 docker compose up --build
 ```
 
+## Operação em produção
+
+Instalação no servidor (HTTPS pelo proxy Caddy, backup diário com cópia externa, restauração, atualização e
+rollback): siga o runbook [`docs/operacao.md`](docs/operacao.md) (change `026-producao`).
+
 ## MCP da RNC (opcional, recomendado)
 
 Com o MCP conectado, o agente confere cada `RK-…` contra a regra do legado (`getRule`) e lê o

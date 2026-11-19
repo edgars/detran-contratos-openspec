@@ -177,7 +177,10 @@ describe("024-kit-robustez › crud-kit", () => {
           throw new (class extends Error {})("falhou");
         },
       });
-      await expect(api.remove(jsonRequest(`/api/x/${a.id}`, "DELETE"), idParams(a.id))).rejects.toThrow("falhou");
+      // 026-producao: erro não tratado vira 500 sem detalhes (antes a exceção subia para o Next).
+      const res = await api.remove(jsonRequest(`/api/x/${a.id}`, "DELETE"), idParams(a.id));
+      expect(res.status).toBe(500);
+      expect(await res.text()).not.toContain("falhou");
       expect(has(a.anexo)).toBe(true);
       expect(await prisma.anexoFiscal.findUnique({ where: { id: a.id } })).not.toBeNull();
     });

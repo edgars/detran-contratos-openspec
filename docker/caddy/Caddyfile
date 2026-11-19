@@ -1,0 +1,42 @@
+# 026-producao: proxy reverso HTTPS, única porta publicada (80 e 443). Variáveis vêm do .env pelo compose.
+# CADDY_TLS: "/certs/fullchain.pem /certs/privkey.pem" (certificado do órgão), o e-mail ACME, ou "internal" (homologação).
+# ACME_EMAIL: o compose preenche um valor inerte quando vazio (a diretiva exige argumento; só o ACME o usa).
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	tls {$CADDY_TLS}
+	encode zstd gzip
+
+	# Healthcheck só pela rede interna do compose: de fora, 404.
+	@health path /api/health
+	respond @health 404
+
+	# Acima disto, 413 antes de o corpo chegar ao Node (PROXY_MAX_BODY_MB > UPLOAD_MAX_MB). MiB (1024²), a mesma
+	# unidade de UPLOAD_MAX_MB em savePdf(); "MB" no Caddy seria 10⁶ bytes.
+	request_body {
+		max_size {$PROXY_MAX_BODY_MB}MiB
+	}
+
+	# HSTS sem includeSubDomains/preload: o domínio pode ser compartilhado com outros sistemas do órgão.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy app:3000
+
+	# Log de acesso em JSON (método, caminho, status, duração), sem Cookie, Authorization nem Set-Cookie.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

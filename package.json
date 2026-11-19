@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate deploy",
     "smoke": "node scripts/smoke.mjs",
     "seed:referencia": "node scripts/seed-referencia.mjs",
-    "resolver:cpf-gestores": "node scripts/resolver-cpf-gestores.mjs"
+    "resolver:cpf-gestores": "node scripts/resolver-cpf-gestores.mjs",
+    "migrar": "tsx scripts/migrar.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -43,6 +44,7 @@
     "eslint-config-next": "15.5.29",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^3.2.7"

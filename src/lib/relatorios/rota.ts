@@ -34,7 +34,7 @@ export function rotaRelatorio<S extends z.ZodType, R>(opcoes: {
       }
       return NextResponse.json(resultado);
     } catch (error) {
-      return handleError(error);
+      return handleError(error, request);
     }
   };
 }

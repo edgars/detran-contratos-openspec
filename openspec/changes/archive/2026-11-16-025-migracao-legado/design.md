@@ -186,6 +186,38 @@ E em `User`: `senhaRedefinir Boolean @default(false)` — fora do schema `zod` d
 - [Dados pessoais do `global.pessoas_fisicas` (~59 colunas, filiação, endereço)] → carregados como o modelo atual pede; minimização é Open Question.
 - [Usuários migrados não entram até o Administrador agir] → é a regra pedida; o relatório lista quem precisa de senha.
 
+## Carga do legado
+
+Texto para o runbook (`docs/operacao.md`, incorporado pela `026-producao`). Comandos para o servidor de produção com Docker Compose; a pasta `./import/` fica ao lado do `docker-compose.yml` e está no `.gitignore` (dados pessoais: nunca versionar).
+
+1. **Pedir o dump ao DETRAN-RJ.** Um arquivo por banco, gerado no servidor MySQL do legado:
+   ```
+   mysqldump --single-transaction --default-character-set=utf8mb4 --hex-blob contratos > contratos.sql
+   mysqldump --single-transaction --default-character-set=utf8mb4 --hex-blob global diretorias departamentos pessoas_fisicas prestadores_servicos pessoas > global.sql
+   ```
+   Pedir também a confirmação da codificação dos bancos (`latin1` ou `utf8`) e anotar a data e a hora do dump.
+2. **Copiar os anexos do servidor antigo.** Copiar a(s) pasta(s) de PDFs do servidor antigo (`rsync -a` ou mídia) para `./import/anexos/`; a estrutura interna não importa (o carregador procura pelo nome do arquivo, sem diferenciar maiúsculas). Copiar `contratos.sql` e `global.sql` para `./import/`.
+3. **Construir o carregador:** `docker compose --profile migracao build migrar`.
+4. **Simular** (quantas vezes for preciso; nada é gravado, nenhum arquivo é copiado, não precisa parar o app):
+   ```
+   docker compose --profile migracao run --rm migrar --origem /import/contratos.sql --origem /import/global.sql --anexos /import/anexos --simular
+   ```
+   Código 1 = abortada (ex.: o dump não bate com `src/lib/migracao/mapa.ts`: a mensagem lista `banco.tabela.coluna` esperadas e as colunas encontradas — ajustar o mapa, o teste do mapa e repetir); se a mensagem pedir, repetir com `--encoding latin1`. Código 2 = concluída com rejeições; código 0 = sem rejeições.
+5. **Conferir o relatório** (`data/migracao/relatorio-<data-hora>-simulacao.json` no volume, e o resumo no terminal):
+   - contagens por tabela (lidas = inseridas + atualizadas + inalteradas + rejeitadas + não carregadas);
+   - `somatorios`: conferir com o **financeiro** os totais de `contratos.valorTotal`, `valorInicial`, `valorMensal`, `pagamentos.valor` e `valorGlosa` (origem × origem arredondada × destino; a diferença tem de ser `0.00`) e a lista de `arredondamentos`;
+   - `rejeitados` (com motivo), `avisos` (CPF/CNPJ sem referência, DV inválido, anexos ausentes/ inválidos, pendências de cadastro com a chave `RK-…`), `colunasIgnoradas`, `usuarios.gruposSemMapeamento`.
+   Decidir com o gestor do sistema se as rejeições são aceitas ou se o legado será corrigido e um novo dump pedido.
+6. **Carga real, com o app parado** (antes da virada):
+   ```
+   docker compose stop app
+   docker compose --profile migracao run --rm migrar --origem /import/contratos.sql --origem /import/global.sql --anexos /import/anexos --confirmar
+   docker compose start app
+   ```
+   A carga recusa se houver sessão criada nos últimos 5 minutos, se o banco já tiver contratos, pagamentos ou fiscais sem carga anterior, ou se o backup falhar. Antes de gravar, faz `data/backups/pre-migracao-<data-hora>.db`; a carga é uma transação única (falhou → nada gravado, arquivos copiados apagados). Ao fim, roda o resolvedor de gestores da 022 e anexa a saída ao relatório. Rodar de novo com o mesmo dump não muda nada; com um dump mais novo (ainda antes da virada) atualiza o que mudou e lista em `existentesForaDoDump` o que sumiu, sem apagar. **Depois da virada, não recarregar** (sobrescreveria edições feitas no app).
+7. **Ativar os usuários.** Nenhuma senha do legado é migrada: os usuários entram inativos e marcados para redefinição (lista em `usuarios.precisamDeSenha` do relatório). Um Administrador abre **Usuários › Editar › Definir senha** (`/users/<id>/senha`) para cada um, informa a senha e a confirmação e entrega a senha ao usuário; ao salvar, o usuário fica ativo. Usuários técnicos: `legado.desconhecido` (autor de penalidades/prestação de contas cujo usuário sumiu do legado) fica inativo.
+8. **Limpar**: apagar `./import/` do servidor depois da conferência (dados pessoais), mantendo o relatório e o backup `pre-migracao-*`.
+
 ## Open Questions
 
 - **Esquema real**: nomes exatos das colunas do banco `global` (PascalCase confirmado só nas citadas em Context) e das chaves primárias de `global.departamentos`, `global.diretorias` e `global.prestadores_servicos`; e a coluna de `departamentos` que liga à diretoria. A primeira simulação com o dump real responde (D3).
@@ -196,3 +228,20 @@ E em `User`: `senhaRedefinir Boolean @default(false)` — fora do schema `zod` d
 - **Usuário técnico `legado.desconhecido`** para autoria de registros cujo usuário sumiu do legado: aceitável, ou o autor prefere rejeitar essas linhas?
 - **`users.pessoa_id` do legado** aponta para `pessoas` ou para `pessoas_fisicas`? (023 deixou `pessoaId` sem relação confirmada.)
 - **MCP da RNC**: com o MCP conectado, `getSourceFile` nos models do legado pode confirmar os nomes de coluna antes do dump chegar; não foi feito nesta proposta.
+
+### Decisões da implementação (apply, 16/11/2026)
+
+Sem dump real (decisão do autor de 13/11/2026) e sem o MCP da RNC nesta execução: nenhuma regra foi conferida com `getRule`/`getSourceFile`; os nomes de coluna seguem a regra de D3 e serão confirmados pela primeira simulação (task 9.3).
+
+- **`groups_users` depois de `users`** (ordem 13 do mapa): `groups_users.userId` recebe o id do usuário migrado (o mesmo vínculo `groups_users.userId = users.id` da migração 023); usuário do legado ausente → linha rejeitada "usuário inexistente". Os perfis vêm dos grupos lidos do dump, então a ordem não muda o resultado.
+- **Usuário já existente**: só ganha os perfis que faltam (conta como atualizado); `created`, `pessoaId`, `superuser` e `ultimoLogin` do legado são copiados só na criação. `pessoaId` só é gravado se a pessoa existir em `pessoas` (Open Question acima continua).
+- **`pessoas_fisicas`**: só `IdPessoaFisica`, `CPF`, `DeNome`, `DtNascimento` e `DtExcluido` são exigidas no dump; as outras ~54 colunas do modelo são opcionais no mapa (ausentes → `null`, listadas em `colunasOpcionaisAusentes`), para a divergência numa coluna secundária não barrar a carga inteira. `dtNascimento` é obrigatório no modelo: data zerada rejeita a pessoa.
+- **Chave primária no `global`**: `id` (convenção do CakePHP; `Departamento.id = Contrato.departamento_id`, `docs/legado/relatorios.md`) para `diretorias`, `departamentos` e `pessoas`; `departamentos.DiretoriaId` pela regra PascalCase. `pessoas_fisicas` e `prestadores_servicos` não preservam id (chaves `cpf`/`cnpj`); CNPJ repetido no `global` → vale a última linha, as outras viram aviso `cnpj_duplicado`.
+- **Tipos de aviso a mais** além da lista de D8: `referencia_inexistente` (departamento, tipo, modalidade ou situação do contrato inexistentes → campo nulo, contrato gravado), `anexo_nao_importado` (sem `--anexos`), `cnpj_duplicado`, `tabela_ausente`. Pendências de cadastro valem para todos os contratos carregados, originais e aditivos.
+- **Datas**: `data` (meia-noite UTC; hora descartada) em `contratos.dataInicio/dataTermino/dataInclusao`, `pagamentos.competencia`, `penalidades.dataRegistro`, `anexos_*` e datas sem hora do `global`; `dataHora` (America/Sao_Paulo) em `dataInclusao` de andamentos, fiscais, históricos e prestação de contas (o app grava o instante real), `groups.created/modified`, `users.*` e `DtExcluido`.
+- **Anexos**: sem `--anexos`, um arquivo já importado por execução anterior (`migracao_arquivos`) é reaproveitado, para não anular a coluna. Na simulação a coluna recebe o marcador `simulacao:<nome>`, descartado com a transação. Anexo de linha que acaba rejeitada não é copiado (a validação roda antes dos anexos).
+- **Execução registrada** em `migracao_execucoes` só depois da leitura do dump, da conferência do mapa e das proteções ("nada é gravado" nos abortos anteriores); o relatório JSON é gravado em toda execução, inclusive abortada. Backup no mesmo segundo de outro ganha sufixo `-2` (`VACUUM INTO` não sobrescreve); pasta `BACKUP_DIR` ou `data/backups`.
+- **Dump sintético padrão termina com código 2** (D12 exige aditivo órfão, competência zerada etc.); a verificação da task 8.1 ("termina com 0") usa a variante `semRejeicoes` do helper.
+- **Docker**: o alvo `migrar` parte do estágio `deps` (node_modules com devDependencies, `tsx` e a CLI do Prisma) mais `COPY . .`, e não do `build` (evita o `next build`, que a carga não usa); fica antes do estágio `run` para o serviço `app` continuar usando o último estágio. O entrypoint roda `prisma migrate deploy` antes da carga, para o banco ter as tabelas da 025 mesmo que o app ainda não tenha subido com esta versão.
+- **Migração Prisma**: `ALTER TABLE users ADD COLUMN senhaRedefinir` no lugar da recriação da tabela que o `migrate dev` gerou (mesmo esquema final, sem recriar `users`).
+- **Contagem "25 tabelas" da task 3.1**: o mapa tem as 23 tabelas de origem de D4 (contratos originais e aditivos são a mesma tabela; `user_perfis` é derivada dos grupos).
