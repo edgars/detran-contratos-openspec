@@ -38,6 +38,22 @@ export function publicUser<T extends Record<string, unknown>>(user: T): Omit<T, 
 }
 
 /**
+ * Atributos do cookie de sessão. Padrão "lax". Com COOKIE_SAMESITE=none (app aberto dentro de um iframe,
+ * ex.: prévia), o cookie vai Secure e Partitioned (CHIPS): sem Partitioned, os navegadores que bloqueiam
+ * cookies de terceiros descartam o cookie e o login dentro do iframe volta sempre para /login.
+ */
+export function sessionCookieOptions() {
+  const iframe = process.env.COOKIE_SAMESITE === "none";
+  return {
+    httpOnly: true,
+    sameSite: iframe ? ("none" as const) : ("lax" as const),
+    secure: iframe || (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"),
+    partitioned: iframe,
+    path: "/",
+  };
+}
+
+/**
  * Cria uma sessão nova (o identificador é sempre novo a cada login) e grava o cookie.
  * Só o hash do token fica no banco.
  */
@@ -49,16 +65,7 @@ export async function createSession(userId: number): Promise<string> {
   const token = randomToken();
   const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000);
   await prisma.session.create({ data: { id: await sha256(token), userId, expiresAt } });
-  store.set(SESSION_COOKIE, await signToken(token), {
-    httpOnly: true,
-    // Padrão "lax". "none" só para abrir o app dentro de um iframe (ex.: prévia), sempre com Secure.
-    sameSite: process.env.COOKIE_SAMESITE === "none" ? "none" : "lax",
-    secure:
-      process.env.COOKIE_SAMESITE === "none" ||
-      (process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"),
-    path: "/",
-    expires: expiresAt,
-  });
+  store.set(SESSION_COOKIE, await signToken(token), { ...sessionCookieOptions(), expires: expiresAt });
   return token;
 }
 
@@ -84,7 +91,8 @@ export async function destroySession(): Promise<void> {
   const store = await cookies();
   const token = await verifyToken(store.get(SESSION_COOKIE)?.value);
   if (token) await prisma.session.deleteMany({ where: { id: await sha256(token) } });
-  store.delete(SESSION_COOKIE);
+  // Apaga com os mesmos atributos: um cookie Partitioned só some se o Set-Cookie também for Partitioned.
+  store.set(SESSION_COOKIE, "", { ...sessionCookieOptions(), maxAge: 0 });
 }
 
 export class UnauthorizedError extends Error {}
