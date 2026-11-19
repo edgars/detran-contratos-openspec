@@ -11,3 +11,7 @@ uploads/
 !.env.example
 .DS_Store
 npm-debug.log*
+/data/
+next-env.d.ts
+*.tsbuildinfo
+/node_modules
