@@ -1,0 +1,236 @@
+import Link from "next/link";
+import { Banknote, FilePlus2, Gavel } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth/session";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
+
+const DAY = 86_400_000;
+const JANELA_VENCENDO = 30;
+const JANELA_VENCIDOS = 90;
+const LIMITE = 10;
+
+type Linha = {
+  id: number;
+  numeroContrato: string | null;
+  objeto: string;
+  fornecedor: string | null;
+  vencimento: Date;
+  dias: number;
+  valorTotal: { toString(): string } | null;
+};
+
+/**
+ * Contratos originais cujo fim de vigência (o maior vencimento entre o contrato e seus aditivos)
+ * cai até `limite`. Um contrato prorrogado por aditivo só conta pela data do aditivo.
+ */
+async function contratosAte(limite: Date, hoje: number): Promise<Linha[]> {
+  const contratos = await prisma.contrato.findMany({
+    where: { parentId: null, dataTermino: { lte: limite } },
+    select: {
+      id: true,
+      numeroContrato: true,
+      objeto: true,
+      dataTermino: true,
+      valorTotal: true,
+      prestadorServico: { select: { deRazaoSocial: true } },
+      aditivos: { select: { dataTermino: true } },
+    },
+  });
+  return contratos.flatMap((c) => {
+    const datas = [c.dataTermino, ...c.aditivos.map((a) => a.dataTermino)].filter((d): d is Date => d != null);
+    if (datas.length === 0) return [];
+    const vencimento = new Date(Math.max(...datas.map((d) => d.getTime())));
+    if (vencimento > limite) return [];
+    return [
+      {
+        id: c.id,
+        numeroContrato: c.numeroContrato,
+        objeto: c.objeto,
+        fornecedor: c.prestadorServico?.deRazaoSocial ?? null,
+        vencimento,
+        dias: Math.round((vencimento.getTime() - hoje) / DAY),
+        valorTotal: c.valorTotal,
+      },
+    ];
+  });
+}
+
+function saudacao(hora: number) {
+  if (hora < 12) return "Bom dia";
+  if (hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function prazo(dias: number) {
+  if (dias === 0) return "Vence hoje";
+  if (dias === 1) return "Amanhã";
+  if (dias > 1) return `Em ${dias} dias`;
+  if (dias === -1) return "Há 1 dia";
+  return `Há ${-dias} dias`;
+}
+
+export default async function Home() {
+  const user = await getSessionUser();
+  const now = new Date();
+  // Vencimentos são gravados à meia-noite UTC do dia: compara pelo dia do servidor (como a lista).
+  const hoje = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const linhas = await contratosAte(new Date(hoje + JANELA_VENCENDO * DAY), hoje);
+  const vencendo = linhas.filter((l) => l.dias >= 0).sort((a, b) => a.dias - b.dias);
+  const vencidos = linhas
+    .filter((l) => l.dias < 0 && l.dias >= -JANELA_VENCIDOS)
+    .sort((a, b) => b.dias - a.dias);
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-balance">
+            {saudacao(now.getHours())}
+            {user ? `, ${user.username}` : ""}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Hoje é <span className="tabular-nums">{formatDate(new Date(hoje))}</span>.{" "}
+            {vencendo.length === 0
+              ? "Nenhum contrato vence nos próximos 30 dias."
+              : vencendo.length === 1
+                ? "1 contrato vence nos próximos 30 dias."
+                : `${vencendo.length} contratos vencem nos próximos 30 dias.`}
+          </p>
+        </div>
+        <nav aria-label="Atalhos" className="flex flex-wrap gap-2">
+          <Link href="/contratos/new" className={cn(buttonVariants())}>
+            <FilePlus2 aria-hidden />
+            Novo contrato
+          </Link>
+          <Link href="/pagamentos/new" className={cn(buttonVariants({ variant: "outline" }))}>
+            <Banknote aria-hidden />
+            Novo pagamento
+          </Link>
+          <Link href="/penalidades/new" className={cn(buttonVariants({ variant: "outline" }))}>
+            <Gavel aria-hidden />
+            Registrar penalidade
+          </Link>
+        </nav>
+      </header>
+
+      <Secao
+        id="vencendo"
+        titulo="Vencendo nos próximos 30 dias"
+        descricao="Contratos cujo fim de vigência, já considerando aditivos, cai nos próximos 30 dias."
+        linhas={vencendo}
+        vazio="Nenhum contrato vence nos próximos 30 dias."
+        tom="vencendo"
+        link
+      />
+      <Secao
+        id="vencidos"
+        titulo="Vencidos"
+        descricao={`Vigência encerrada nos últimos ${JANELA_VENCIDOS} dias, sem aditivo que a prorrogue.`}
+        linhas={vencidos}
+        vazio={`Nenhum contrato venceu nos últimos ${JANELA_VENCIDOS} dias.`}
+        tom="vencido"
+      />
+    </div>
+  );
+}
+
+function Secao({
+  id,
+  titulo,
+  descricao,
+  linhas,
+  vazio,
+  tom,
+  link = false,
+}: {
+  id: string;
+  titulo: string;
+  descricao: string;
+  linhas: Linha[];
+  vazio: string;
+  tom: "vencendo" | "vencido";
+  link?: boolean;
+}) {
+  const visiveis = linhas.slice(0, LIMITE);
+  return (
+    <section aria-labelledby={`${id}-titulo`} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div className="space-y-0.5">
+          <h2 id={`${id}-titulo`} className="flex items-baseline gap-2 text-base font-semibold">
+            {titulo}
+            <span className="text-sm font-normal text-muted-foreground tabular-nums">{linhas.length}</span>
+          </h2>
+          <p className="text-sm text-muted-foreground">{descricao}</p>
+        </div>
+        {link && (
+          <Link
+            href="/contratos"
+            className="shrink-0 rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Ver todos os contratos
+          </Link>
+        )}
+      </div>
+
+      {visiveis.length === 0 ? (
+        <p className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">{vazio}</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[40rem] text-sm">
+            <thead className="bg-muted/50 text-left text-xs whitespace-nowrap text-muted-foreground">
+              <tr>
+                <th scope="col" className="h-9 px-3 font-medium">Nº do contrato</th>
+                <th scope="col" className="h-9 px-3 font-medium">Objeto</th>
+                <th scope="col" className="hidden h-9 px-3 font-medium lg:table-cell">Fornecedor</th>
+                <th scope="col" className="h-9 px-3 font-medium">Vencimento</th>
+                <th scope="col" className="h-9 px-3 font-medium">Prazo</th>
+                <th scope="col" className="h-9 px-3 text-right font-medium">Valor total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {visiveis.map((l) => (
+                <tr key={l.id} className="transition-colors hover:bg-muted/40">
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    <Link
+                      href={`/contratos/${l.id}`}
+                      className="rounded-sm font-medium tabular-nums underline-offset-4 hover:text-primary hover:underline"
+                    >
+                      {l.numeroContrato ?? `#${l.id}`}
+                    </Link>
+                  </td>
+                  <td className="max-w-80 truncate px-3 py-2.5" title={l.objeto}>
+                    {l.objeto}
+                  </td>
+                  <td className="hidden max-w-64 truncate px-3 py-2.5 text-muted-foreground lg:table-cell">
+                    {l.fornecedor ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">{formatDate(l.vencimento)}</td>
+                  <td
+                    className={cn(
+                      "px-3 py-2.5 whitespace-nowrap tabular-nums",
+                      tom === "vencido" ? "text-destructive" : l.dias <= 7 ? "font-medium" : "text-muted-foreground",
+                    )}
+                  >
+                    {prazo(l.dias)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                    {formatCurrency(l.valorTotal) || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {linhas.length > LIMITE && (
+        <p className="text-sm text-muted-foreground">
+          Mostrando {LIMITE} de <span className="tabular-nums">{linhas.length}</span>.
+        </p>
+      )}
+    </section>
+  );
+}

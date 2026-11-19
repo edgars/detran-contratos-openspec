@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NAV_ITEMS, findNavItem } from "@/lib/navigation";
-import { generateStaticParams } from "@/app/[entidade]/page";
+import { generateStaticParams } from "@/app/(app)/[entidade]/page";
 
 // Spec app-shell › "Abrir o app"
 const SPEC_ENTITIES = [
@@ -18,13 +18,16 @@ describe("navegação principal", () => {
   it("cada item abre uma rota existente", () => {
     const params = generateStaticParams().map((p) => `/${p.entidade}`);
     for (const item of NAV_ITEMS) {
-      const ownPage = existsSync(`src/app${item.href}/page.tsx`);
+      const ownPage = existsSync(`src/app/(app)${item.href}/page.tsx`);
       expect(ownPage || params.includes(item.href), item.href).toBe(true);
       expect(findNavItem(item.href.slice(1))).toBe(item);
     }
   });
 
   it("cada item aponta para a change que entrega a lista", () => {
-    for (const item of NAV_ITEMS) expect(existsSync(`openspec/changes/${item.change}`), item.change).toBe(true);
+    for (const item of NAV_ITEMS) {
+      const archived = existsSync("openspec/changes/archive") && readdirSync("openspec/changes/archive").some((d) => d.endsWith(`-${item.change}`));
+      expect(existsSync(`openspec/changes/${item.change}`) || archived, item.change).toBe(true);
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,15 @@ import { describe, expect, it } from "vitest";
  * Toda regra da seção "4. Regras transversais" de tasks.md tem um comentário `// RK-…` no
  * código-fonte, no ponto onde é aplicada, e um teste que cita a mesma chave.
  */
-const tasks = readFileSync("openspec/changes/001-project-foundation/tasks.md", "utf8");
+// A change pode estar ativa ou já arquivada (openspec/changes/archive/<data>-001-project-foundation).
+function changeDir(id: string): string {
+  const active = `openspec/changes/${id}`;
+  if (existsSync(active)) return active;
+  const archived = readdirSync("openspec/changes/archive").find((d) => d.endsWith(`-${id}`));
+  if (!archived) throw new Error(`change ${id} não encontrada`);
+  return `openspec/changes/archive/${archived}`;
+}
+const tasks = readFileSync(`${changeDir("001-project-foundation")}/tasks.md`, "utf8");
 const section = tasks.split("## 4. Regras transversais")[1].split("## 5.")[0];
 const keys = [...new Set(section.match(/RK-[0-9a-f]{12}/g) ?? [])];
 

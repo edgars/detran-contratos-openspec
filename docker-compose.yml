@@ -1,13 +1,17 @@
+# 018-deployment: a aplicação inteira com um comando (`docker compose up --build`).
+# Next.js serve frontend e API no mesmo processo; o SQLite é um arquivo no volume `dados`.
 services:
   app:
     build: .
     env_file: .env
     environment:
-      DATABASE_URL: "file:../data/app.db"
+      DATABASE_URL: "file:/app/data/app.db"
+      UPLOAD_DIR: "/app/data/uploads"
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       - dados:/app/data
+    restart: unless-stopped
 
 volumes:
   dados:

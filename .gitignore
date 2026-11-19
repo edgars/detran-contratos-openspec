@@ -15,3 +15,8 @@ npm-debug.log*
 next-env.d.ts
 *.tsbuildinfo
 /node_modules
+
+# impeccable (instalar com: npx impeccable install --project --providers=claude)
+.claude/skills/impeccable/
+.claude/agents/impeccable-*
+.claude/settings.local.json
