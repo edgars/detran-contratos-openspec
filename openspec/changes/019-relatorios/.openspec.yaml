@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Relatórios gerenciais do legado — por gestor, vencendo, vencidos, cadastro incompleto, acompanhamento de meta e acerto de valor"
+affected_areas:
+  - relatorios
+  - tipo-contratos
+  - app-shell

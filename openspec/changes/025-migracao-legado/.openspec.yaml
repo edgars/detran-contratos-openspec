@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Migração do legado — carregador idempotente do dump MySQL (bancos contratos e global) com anexos, usuários inativos sem senha, perfis pelo mapeamento da 023, simulação e relatório de conferência"
+affected_areas:
+  - migracao-legado
+  - users

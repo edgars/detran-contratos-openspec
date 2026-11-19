@@ -17,11 +17,17 @@ context: |
   The RNC MCP server (env RNC_MCP_URL, RNC_MCP_TOKEN) is optional: getRule verifies an RK, getSourceFile reads the legacy code, searchKnowledge answers what the docs leave unclear.
   Author directives (follow VERBATIM):
   - Build order: 001-project-foundation, 001b-security-baseline, then 002 to 018 in numeric order. 001b-security-baseline is mandatory before any entity change.
+  - Build order after 018 (NOT numeric; dependencies decide): 024-kit-robustez, 022-pessoas-fornecedores, 020-contratos-complementos, 021-prestacao-contas-fluxo, 019-relatorios, 023-perfis-acesso, 025-migracao-legado, 026-producao.
   - Every page and every /api route requires a logged-in session, except /login and /api/auth/*. Never read a session id from the URL, body or a custom header.
   - Store passwords only as an argon2id or bcrypt hash. Never list, return or log password, passwordHash, passwordold, passwordnew or passwordconfirm.
   - Money columns (valor, valorGlosa, valorInicial, valorMensal, valorTotal) are Prisma Decimal, never Float.
   - Every write validates the body with a strict zod schema and saves only declared fields.
   - Uploads go through savePdf() from 001b-security-baseline: PDF signature check, size limit, stored outside public/, served only to a valid session.
+  - Expiry ("vencendo"/"vencido"/vigência) uses ONLY the contract's own dataTermino, never the latest addendum (author decision 2026-11-13). Addenda are separate rows with their own dates.
+  - Access profiles: Administrador, Gestor de contrato, Fiscal, Financeiro, Consulta (author decision 2026-11-13). A user may hold more than one profile.
+  - Production keeps SQLite on a single server with Docker Compose (author decision 2026-11-13); backups and HTTPS are part of 026-producao.
+  - Legacy data migration: no dump available yet (2026-11-13); 025 ships the loader and its checks, run when the dump arrives.
+  - Legacy evidence for changes 019+ lives in docs/legado/ (read from the RNC MCP); cite it instead of guessing.
   - Legacy search-screen fields (busca, campo, ordenar, buscaDepto, buscaGestor, buscaGestorSuplente, vencendo, deRazaoSocial, deDepartamento, deNome) are list filters, never database columns.
 
 rules:

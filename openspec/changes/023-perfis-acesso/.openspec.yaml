@@ -1,0 +1,14 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Perfis de acesso (Administrador, Gestor de contrato, Fiscal, Financeiro, Consulta) com matriz de permissões por recurso e ação, aplicada no servidor (403) e na interface, gestão de perfis na tela de usuários e migração dos usuários atuais"
+affected_areas:
+  - perfis-acesso
+  - users
+  - security
+  - prisma/schema.prisma
+  - src/lib/auth
+  - src/lib/crud/server.ts
+  - src/lib/navigation.ts
+  - src/components/crud
+  - src/app/(app)
+  - src/app/api

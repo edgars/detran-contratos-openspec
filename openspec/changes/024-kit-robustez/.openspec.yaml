@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Corrigir os defeitos do kit de CRUD registrados nas changes 001b–018: anexos órfãos, exclusão sem gancho, erros de upload sem campo, prepare sem o registro atual, listWhere síncrono, busca em colunas numéricas, ordenação fixa, campo opcional que não limpa e campos de senha aninhados"
+affected_areas:
+  - crud-kit
+  - security
+  - src/lib/crud/server.ts
+  - src/lib/uploads.ts
+  - src/lib/rules/fields.ts
+  - src/lib/auth/session.ts
+  - src/components/crud
+  - src/lib/entities

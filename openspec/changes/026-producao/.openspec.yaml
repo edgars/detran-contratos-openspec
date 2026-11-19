@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Produção — servidor único com Docker Compose: HTTPS por proxy reverso, cabeçalhos de segurança, healthcheck, logs estruturados, backup e restauração do SQLite e dos anexos, atualização com rollback, CI e runbook"
+affected_areas:
+  - producao
+  - deployment
+  - security

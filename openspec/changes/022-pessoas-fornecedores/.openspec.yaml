@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Chaves do legado para pessoas e fornecedores — CPF em pessoas_fisicas, CNPJ em prestadores_servicos, gestor/suplente/fiscal por CPF, fornecedor exibido e buscado por CNPJ, e busca remota nos campos de referência"
+affected_areas:
+  - app-shell
+  - contratos
+  - fiscais

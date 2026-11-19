@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-13
+goal: "Prestação de contas como no legado — lista de pendentes/realizadas pelos critérios do legado e fluxo por contrato com conclusão automática"
+affected_areas:
+  - prestacao-contas
+  - tipo-contratos
