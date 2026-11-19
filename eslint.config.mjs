@@ -22,6 +22,11 @@ const eslintConfig = [
     },
   },
   {
+    // Testes de migração precisam de SQL bruto num banco temporário; o app não.
+    files: ["tests/**/*.ts"],
+    rules: { "no-restricted-properties": "off" },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",

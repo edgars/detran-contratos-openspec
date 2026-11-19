@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, CircleAlert, FileText, Loader2, Trash2, X } from "lucide-react";
+import { CalendarDays, CircleAlert, Eye, FileText, Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -17,8 +17,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -27,6 +29,7 @@ import { MaskedInput } from "@/components/masked-input";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OptionSelect } from "./option-select";
+import { RemoteLookup } from "./remote-lookup";
 import { useLookupOptions } from "./use-options";
 import type { FieldDef } from "./types";
 
@@ -45,6 +48,7 @@ export function toFormValues(row: Record<string, unknown>, fields: FieldDef[]): 
   for (const f of fields) {
     const v = row[f.name];
     if (v === null || v === undefined) out[f.name] = "";
+    else if (f.kind === "checkboxes") out[f.name] = (Array.isArray(v) ? v : [v]).map(String).join(",");
     else if (f.kind === "date") out[f.name] = formatDate(v as string);
     else if (f.kind === "money") out[f.name] = formatCurrency(v as string).replace(/^-?R\$ /, (m) => (m.startsWith("-") ? "-" : ""));
     else out[f.name] = String(v);
@@ -148,6 +152,57 @@ function FileControl({
   );
 }
 
+/** Valores marcados de um campo `checkboxes` (guardado no formulário como "A,B"). */
+const checkedList = (value: string) => value.split(",").filter(Boolean);
+
+/** Grupo de caixas de seleção (023-perfis-acesso: perfis do usuário); envia a lista dos marcados. */
+function CheckboxesControl({
+  id,
+  field,
+  value,
+  invalid,
+  describedBy,
+  labelId,
+  onChange,
+}: {
+  id: string;
+  field: FieldDef;
+  value: string;
+  invalid?: boolean;
+  describedBy?: string;
+  labelId: string;
+  onChange: (v: string) => void;
+}) {
+  const marcados = checkedList(value);
+  const options = field.options ?? [];
+  const toggle = (opt: string, on: boolean) => {
+    const next = options.map((o) => o.value).filter((v) => (v === opt ? on : marcados.includes(v)));
+    onChange(next.join(","));
+  };
+  return (
+    <div
+      id={id}
+      role="group"
+      tabIndex={-1}
+      aria-labelledby={labelId}
+      aria-describedby={describedBy}
+      className="grid gap-x-6 gap-y-3 rounded-lg outline-none sm:grid-cols-2"
+    >
+      {options.map((o) => {
+        const optId = `${id}-${o.value}`;
+        return (
+          <div key={o.value} className="flex items-center gap-2.5">
+            <Checkbox id={optId} checked={marcados.includes(o.value)} aria-invalid={invalid} onCheckedChange={(c) => toggle(o.value, c)} />
+            <Label htmlFor={optId} className="font-normal">
+              {o.label}
+            </Label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
@@ -173,7 +228,9 @@ function FieldControl({
   const a11y = { "aria-invalid": invalid, "aria-describedby": describedBy, "aria-required": field.required || undefined };
   switch (field.kind) {
     case "textarea":
-      return <Textarea id={id} value={value} className="min-h-24" {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <Textarea id={id} value={value} className="min-h-24" maxLength={field.maxLength} {...a11y} onChange={(e) => onChange(e.target.value)} />
+      );
     case "select":
     case "lookup":
       return (
@@ -188,6 +245,20 @@ function FieldControl({
           allowEmpty={!field.required}
         />
       );
+    case "search":
+      // Busca remota (tabelas grandes de referência; 022-pessoas-fornecedores, D6).
+      return field.lookup ? (
+        <RemoteLookup
+          id={id}
+          value={value}
+          lookup={field.lookup}
+          invalid={invalid}
+          describedBy={describedBy}
+          required={field.required}
+          allowClear={!field.required}
+          onChange={onChange}
+        />
+      ) : null;
     case "toggle": {
       const [on, off] = field.toggleValues ?? ["S", "N"];
       const checked = toggleOn(field, value);
@@ -241,10 +312,32 @@ function FieldControl({
           />
         </InputGroup>
       );
+    case "checkboxes":
+      return (
+        <CheckboxesControl
+          id={id}
+          field={field}
+          value={value}
+          invalid={invalid}
+          describedBy={describedBy}
+          labelId={labelId}
+          onChange={onChange}
+        />
+      );
     case "file":
       return <FileControl id={id} value={value} file={file} invalid={invalid} describedBy={describedBy} onFile={onFile} />;
     case "password":
-      return <Input id={id} type="password" autoComplete="new-password" value={value} {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <Input
+          id={id}
+          type="password"
+          autoComplete="new-password"
+          value={value}
+          maxLength={field.maxLength}
+          {...a11y}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
     case "readonly":
       return (
         <p id={id} aria-labelledby={labelId} aria-describedby={describedBy} className="flex min-h-8 items-center text-sm tabular-nums break-words">
@@ -252,8 +345,21 @@ function FieldControl({
         </p>
       );
     default:
-      return <Input id={id} value={value} {...a11y} onChange={(e) => onChange(e.target.value)} />;
+      return <Input id={id} value={value} maxLength={field.maxLength} {...a11y} onChange={(e) => onChange(e.target.value)} />;
   }
+}
+
+/** Contador discreto de caracteres: só aparece a partir de 80% do limite. */
+function CharCounter({ field, value }: { field: FieldDef; value: string }) {
+  const max = field.maxLength;
+  if (!max || !["text", "textarea", "password"].includes(field.kind) || value.length < Math.floor(max * 0.8)) return null;
+  const restam = max - value.length;
+  return (
+    <p className={cn("text-right text-xs tabular-nums", restam === 0 ? "text-foreground" : "text-muted-foreground")} aria-live="polite">
+      {value.length.toLocaleString("pt-BR")}/{max.toLocaleString("pt-BR")}
+      <span className="sr-only">{restam === 0 ? " — limite atingido" : ` — restam ${restam} caracteres`}</span>
+    </p>
+  );
 }
 
 type Group = { title?: string; fields: FieldDef[] };
@@ -311,6 +417,9 @@ export function EntityForm({
   canDelete = true,
   afterSavePath,
   submitLabel,
+  deleteDescription,
+  readOnly = false,
+  canAttach = true,
 }: {
   title: string;
   api: string;
@@ -321,10 +430,16 @@ export function EntityForm({
   canDelete?: boolean;
   afterSavePath?: string;
   submitLabel?: string;
+  /** Texto do diálogo de exclusão (padrão: aviso de remoção definitiva). */
+  deleteDescription?: React.ReactNode;
+  /** Só `ver` (023-perfis-acesso): campos desabilitados, sem *Salvar* nem *Excluir*. */
+  readOnly?: boolean;
+  /** Sem `anexar` (023-perfis-acesso): os campos de arquivo não aparecem. */
+  canAttach?: boolean;
 }) {
   const router = useRouter();
   const editing = id !== undefined;
-  const visible = fields.filter((f) => !(editing && f.createOnly));
+  const visible = fields.filter((f) => !(editing && f.createOnly) && (canAttach || f.kind !== "file"));
   const twoCols = visible.some((f) => f.section || f.span === "half");
   const groups = groupFields(visible);
   const subject = subjectOf(title);
@@ -366,14 +481,20 @@ export function EntityForm({
     event.preventDefault();
     setSaving(true);
     setErrors({});
-    const payload: Record<string, string> = {};
-    for (const f of visible) if (f.kind !== "readonly" && f.kind !== "file") payload[f.name] = values[f.name] ?? "";
+    const payload: Record<string, string | string[]> = {};
+    for (const f of visible) {
+      if (f.kind === "checkboxes") payload[f.name] = checkedList(values[f.name] ?? "");
+      else if (f.kind !== "readonly" && f.kind !== "file") payload[f.name] = values[f.name] ?? "";
+    }
     const chosen = Object.entries(files).filter(([, f]) => f);
     let body: BodyInit;
     const headers: HeadersInit = {};
     if (chosen.length) {
       const form = new FormData();
-      for (const [k, v] of Object.entries(payload)) form.set(k, v);
+      for (const [k, v] of Object.entries(payload)) {
+        if (Array.isArray(v)) for (const item of v) form.append(k, item);
+        else form.set(k, v);
+      }
       for (const [k, f] of chosen) form.set(k, f as File);
       body = form;
     } else {
@@ -435,7 +556,7 @@ export function EntityForm({
       <div className="@container/form flex w-full max-w-3xl flex-col gap-6">
         <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
-          {editing && canDelete && (
+          {editing && canDelete && !readOnly && (
             <AlertDialog>
               <AlertDialogTrigger
                 render={
@@ -453,7 +574,9 @@ export function EntityForm({
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>{subject ? `Excluir ${subject.noun}?` : "Excluir este registro?"}</AlertDialogTitle>
-                  <AlertDialogDescription>O registro será removido definitivamente. Esta ação não pode ser desfeita.</AlertDialogDescription>
+                  <AlertDialogDescription>
+                    {deleteDescription ?? "O registro será removido definitivamente. Esta ação não pode ser desfeita."}
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -466,6 +589,13 @@ export function EntityForm({
             </AlertDialog>
           )}
         </header>
+
+        {readOnly && (
+          <p className="-mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Eye className="size-4 shrink-0" aria-hidden />
+            Somente leitura: o seu perfil permite consultar este registro, mas não alterá-lo.
+          </p>
+        )}
 
         {loading ? (
           <div className="flex flex-col gap-6">
@@ -486,7 +616,8 @@ export function EntityForm({
             ))}
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
+          // Modo leitura: `disabled` no fieldset desabilita todos os controles de uma vez.
+          <fieldset disabled={readOnly} className="flex min-w-0 flex-col gap-6">
             {groups.map((g, i) => (
               <Section key={g.title ?? `_${i}`} group={g} index={i}>
                 <FieldsGrid twoCols={twoCols}>
@@ -518,6 +649,7 @@ export function EntityForm({
                           onChange={(v) => setValues((prev) => ({ ...prev, [f.name]: v }))}
                           onFile={(file) => setFiles((prev) => ({ ...prev, [f.name]: file }))}
                         />
+                        <CharCounter field={f} value={values[f.name] ?? ""} />
                         {f.description && <FieldDescription id={descId}>{f.description}</FieldDescription>}
                         {errors[f.name] && (
                           <FieldError id={errId} className="flex items-start gap-1.5">
@@ -544,18 +676,20 @@ export function EntityForm({
                 </div>
               </div>
             )}
-          </div>
+          </fieldset>
         )}
       </div>
 
       <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-8 border-t bg-background px-6 py-3">
         <div className="flex w-full max-w-3xl flex-wrap items-center gap-2">
-          <Button type="submit" disabled={saving || loading}>
-            {saving && <Loader2 className="animate-spin" aria-hidden />}
-            {saving ? "Salvando…" : saveLabel}
-          </Button>
+          {!readOnly && (
+            <Button type="submit" disabled={saving || loading}>
+              {saving && <Loader2 className="animate-spin" aria-hidden />}
+              {saving ? "Salvando…" : saveLabel}
+            </Button>
+          )}
           <Button variant="outline" nativeButton={false} render={<Link href={basePath} />}>
-            Cancelar
+            {readOnly ? "Voltar" : "Cancelar"}
           </Button>
         </div>
       </div>

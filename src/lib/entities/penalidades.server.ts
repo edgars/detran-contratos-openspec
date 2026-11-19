@@ -1,48 +1,38 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { FieldRuleError, crudHandlers, type RawBody } from "@/lib/crud/server";
+import { FieldRuleError, crudHandlers, type Db, type RawBody } from "@/lib/crud/server";
 import { withAuthor } from "@/lib/auth/author";
 import { ARQUIVO_PENALIDADE, MSG } from "@/lib/rules";
-import { optionalString, requiredInt } from "@/lib/rules/fields";
-import { UploadError, savePdf } from "@/lib/uploads";
+import { requiredInt } from "@/lib/rules/fields";
 
-/** API de Penalidades (016-penalidades). */
+/**
+ * API de Penalidades (016-penalidades). `arquivo` não está no schema: é o kit que o grava
+ * (`fileFields`, 024-kit-robustez) com o nome gerado por `savePdf`; nunca vem do cliente.
+ */
 export const penalidadesSchema = z.object({
-  arquivo: optionalString(), // nome gerado por savePdf no prepare; nunca vem do cliente
   contratoId: requiredInt(MSG.obrigatorio("Contrato")),
 });
 
-async function uploadArquivo(file: unknown): Promise<string> {
-  try {
-    // RK-174d58601890 — "O arquivo anexo deve ser do tipo PDF!" (assinatura %PDF- conferida em savePdf)
-    // RK-abb6ac79fad7 — "Não existe arquivo para anexar!" (savePdf recusa ausência de arquivo)
-    return await savePdf(file, ARQUIVO_PENALIDADE);
-  } catch (error) {
-    if (error instanceof UploadError) throw new FieldRuleError({ arquivo: error.message });
-    throw error;
-  }
-}
-
-export async function preparePenalidade(raw: RawBody, ctx: { mode: "create" | "update" }): Promise<RawBody> {
+export function preparePenalidade(raw: RawBody): RawBody {
   const out = { ...raw };
   // Autoria pela sessão: userId enviado pelo cliente é descartado (gravado no beforeSave via withAuthor).
   delete out.userId;
   delete out.dataRegistro;
-  if (out.arquivo instanceof Blob || ctx.mode === "create") {
-    out.arquivo = await uploadArquivo(out.arquivo);
-  } else {
-    // Edição sem arquivo novo: o arquivo atual é mantido (campo fora do update).
-    delete out.arquivo;
-  }
   return out;
 }
 
 export const penalidadesApi = crudHandlers({
-  delegate: () => prisma.penalidade,
+  resource: "penalidades", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
+  delegate: (db: Db = prisma) => db.penalidade,
   schema: penalidadesSchema,
+  fileFields: {
+    // RK-174d58601890 — "O arquivo anexo deve ser do tipo PDF!" (assinatura %PDF- conferida em savePdf)
+    // RK-abb6ac79fad7 — "Não existe arquivo para anexar!" (required: arquivo exigido na inclusão)
+    arquivo: { rule: ARQUIVO_PENALIDADE, required: true },
+  },
   searchFields: ["arquivo"],
   orderBy: { id: "desc" },
-  prepare: (raw, ctx) => preparePenalidade(raw, ctx),
+  prepare: (raw) => preparePenalidade(raw),
   beforeSave: async (data, ctx) => {
     const contrato = await prisma.contrato.findUnique({ where: { id: data.contratoId as number } });
     if (!contrato) throw new FieldRuleError({ contratoId: "Contrato não encontrado" });

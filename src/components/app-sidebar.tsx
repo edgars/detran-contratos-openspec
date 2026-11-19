@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CircleDot,
   ClipboardCheck,
+  FileChartColumn,
   FileText,
   Gavel,
   History,
@@ -39,12 +40,14 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import type { Perfil } from "@/lib/auth/permissions";
 import { navByGroup, type NavGroup } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 /** Um ícone por entidade (chave: `NavItem.name`). */
 const ICONS: Record<string, LucideIcon> = {
   Contratos: FileText,
+  Relatorios: FileChartColumn,
   Pagamentos: Banknote,
   Fiscais: ShieldCheck,
   Penalidades: Gavel,
@@ -74,11 +77,14 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Navegação principal, agrupada por área de trabalho. */
-export function AppSidebar() {
+/**
+ * Navegação principal, agrupada por área de trabalho. 023-perfis-acesso: só os itens que o usuário
+ * pode listar (o servidor checa de novo em cada página e API).
+ */
+export function AppSidebar({ perfis }: { perfis: Perfil[] }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
-  const groups = navByGroup();
+  const groups = navByGroup({ perfis });
   const [closed, setClosed] = useState<Partial<Record<NavGroup, boolean>>>({});
 
   // No celular o menu é uma gaveta: fecha ao escolher um destino.

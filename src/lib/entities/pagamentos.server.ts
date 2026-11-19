@@ -1,21 +1,20 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { crudHandlers } from "@/lib/crud/server";
+import { crudHandlers, type Db } from "@/lib/crud/server";
 import { toDecimal } from "@/lib/money";
 import { MSG, pagamentoFields } from "@/lib/rules";
 import { optionalString, requiredInt, requiredString } from "@/lib/rules/fields";
 import { GLOSA_OPCOES, MESES } from "./pagamentos";
 
-const blankToUndefined = (v: unknown) => (v === null || (typeof v === "string" && v.trim() === "") ? undefined : v);
+/** Vazio ou `null` viram `null` (limpa na edição); ausente continua `undefined` (não altera). */
+const blankToNull = (v: unknown) => (v === undefined ? undefined : v === null || (typeof v === "string" && v.trim() === "") ? null : v);
 
 /** Valor monetário opcional: texto `1.234,56` que `toDecimal` consiga ler (nunca Number/parseFloat). */
 const optionalMoney = (label: string) =>
-  optionalString().refine((v) => v === undefined || toDecimal(v) !== null, { error: `${label} inválido` });
+  optionalString().refine((v) => v === undefined || v === null || toDecimal(v) !== null, { error: `${label} inválido` });
 
 const optionalOption = (values: string[], label: string) =>
-  z.preprocess(blankToUndefined, z.enum(values as [string, ...string[]], { error: `${label} inválido` }).optional());
-
-const OPTIONAL_KEYS = ["ano", "notaFiscal", "empenho", "notaLiquidacao", "ordemBancaria", "valor", "valorGlosa", "mes", "glosa"] as const;
+  z.preprocess(blankToNull, z.enum(values as [string, ...string[]], { error: `${label} inválido` }).nullish());
 
 /** API de Pagamentos (006-pagamentos). */
 export const pagamentosSchema = z.object({
@@ -34,17 +33,16 @@ export const pagamentosSchema = z.object({
 });
 
 export const pagamentosApi = crudHandlers({
-  delegate: () => prisma.pagamento,
+  resource: "pagamentos", // 023-perfis-acesso (matriz em src/lib/auth/permissions.ts)
+  delegate: (db: Db = prisma) => db.pagamento,
   schema: pagamentosSchema,
   searchFields: ["numeroProcesso", "ano", "notaFiscal", "empenho", "notaLiquidacao"],
   orderBy: { id: "desc" },
   beforeSave: (data) => {
     const out: Record<string, unknown> = { ...data };
-    // Campo opcional esvaziado no formulário chega como undefined; grava null para poder limpar na edição.
-    for (const key of OPTIONAL_KEYS) if (out[key] === undefined) out[key] = null;
+    // Campo esvaziado chega como null (optionalString, 024-kit-robustez) e limpa a coluna; ausente não altera.
     // Dinheiro só com toDecimal (diretiva do autor: colunas Decimal, nunca Float).
-    out.valor = toDecimal(out.valor);
-    out.valorGlosa = toDecimal(out.valorGlosa);
+    for (const key of ["valor", "valorGlosa"]) if (out[key] !== undefined) out[key] = toDecimal(out[key]);
     return out;
   },
 });

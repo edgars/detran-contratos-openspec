@@ -1,6 +1,8 @@
 /** Definições de tela usadas pelo kit de CRUD (lista e formulário de cada entidade). */
 
-export type ColumnFormat = "text" | "date" | "currency" | "boolean" | "file";
+/** `cpf`/`cnpj`: documento gravado só com dígitos, exibido com máscara (022-pessoas-fornecedores). */
+/** `options`: valor (ou lista de valores) trocado pelo rótulo de `options`, separados por vírgula (023). */
+export type ColumnFormat = "text" | "date" | "currency" | "boolean" | "file" | "cpf" | "cnpj" | "options";
 
 export type ColumnDef = {
   key: string;
@@ -12,21 +14,46 @@ export type ColumnDef = {
   align?: "left" | "right";
   /** Coluna secundária: some em telas estreitas. */
   secondary?: boolean;
+  /**
+   * Cabeçalho clicável que ordena a lista por `key` (`sort=<key>:asc|desc`). Só para colunas
+   * cujo campo está em `sortFields` da entidade no servidor (024-kit-robustez).
+   */
+  sortable?: boolean;
+  /** Rótulos do formato `options`. */
+  options?: Option[];
 };
 
 export type Option = { value: string; label: string };
+
+/**
+ * Lookup de uma API de referência. Configuração declarativa (sem função): as configs de
+ * `src/lib/entities/*.ts` passam de server components para client components.
+ */
+export type LookupConfig = {
+  /** Rota da lista, com parâmetros fixos (ex.: `/api/pessoas_fisicas?comCpf=1`). */
+  api: string;
+  labelField: string;
+  /** Coluna gravada (padrão `id`); na busca remota, também o filtro exato que resolve o rótulo. */
+  valueField?: string;
+  /** Busca remota: coluna exibida depois do nome ("Nome — 529.982.247-25"). */
+  detailField?: string;
+  /** Busca remota: máscara do `detailField`. */
+  detailFormat?: "cpf" | "cnpj";
+};
 
 export type FieldKind =
   | "text"
   | "textarea"
   | "select" // opções fixas
-  | "lookup" // opções carregadas de uma API
+  | "lookup" // opções carregadas de uma API (tabelas pequenas)
+  | "search" // busca remota na API enquanto digita (tabelas grandes; 022-pessoas-fornecedores)
   | "toggle" // grava "S"/"N" (ou 1/0 com toggleValues)
   | "date" // dd/MM/yyyy
   | "money" // R$ 1.234,56
   | "masked" // máscara # e A
   | "file" // PDF enviado em multipart
   | "password"
+  | "checkboxes" // várias opções fixas (Checkbox); envia uma lista (023-perfis-acesso)
   | "readonly";
 
 export type FieldDef = {
@@ -35,7 +62,7 @@ export type FieldDef = {
   kind: FieldKind;
   required?: boolean;
   options?: Option[];
-  lookup?: { api: string; labelField: string; valueField?: string };
+  lookup?: LookupConfig;
   mask?: string;
   toggleValues?: [string | number, string | number];
   description?: string;
@@ -45,12 +72,14 @@ export type FieldDef = {
   section?: string;
   /** Largura no grid do formulário: "full" (linha inteira) ou "half" (metade em telas largas). */
   span?: "full" | "half";
+  /** Limite de caracteres (text/textarea/password/masked): aplica `maxLength` e mostra contador perto do limite. */
+  maxLength?: number;
 };
 
 export type ListFilter = {
   name: string;
   label: string;
-  kind: "select" | "lookup" | "number";
+  kind: "select" | "lookup" | "search" | "number";
   options?: Option[];
-  lookup?: { api: string; labelField: string; valueField?: string };
+  lookup?: LookupConfig;
 };

@@ -169,4 +169,17 @@ describe("006-pagamentos", () => {
     expect((await collection.GET(jsonRequest("/api/pagamentos"))).status).toBe(401);
     expect((await collection.POST(jsonRequest("/api/pagamentos", "POST", valido()))).status).toBe(401);
   });
+
+  // 024-kit-robustez › crud-kit › "Campo opcional apagável na edição"
+  it("Limpar um campo opcional: notaFiscal 123 apagada no formulário vira null", async () => {
+    await loginAs();
+    const p = await prisma.pagamento.create({
+      data: { competencia: new Date(Date.UTC(2026, 0, 1)), numeroProcesso: "LIMPAR-1", contratoId, notaFiscal: "123" },
+    });
+    const res = await item.PUT(jsonRequest(`/api/pagamentos/${p.id}`, "PUT", { ...valido(), notaFiscal: "" }), idParams(p.id));
+    expect(res.status).toBe(200);
+    expect((await prisma.pagamento.findUniqueOrThrow({ where: { id: p.id } })).notaFiscal).toBeNull();
+    const lido = await (await item.GET(jsonRequest(`/api/pagamentos/${p.id}`), idParams(p.id))).json();
+    expect(lido.notaFiscal).toBeNull();
+  });
 });

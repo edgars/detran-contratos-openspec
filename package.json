@@ -10,7 +10,9 @@
     "test": "vitest run",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "seed:referencia": "node scripts/seed-referencia.mjs",
+    "resolver:cpf-gestores": "node scripts/resolver-cpf-gestores.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

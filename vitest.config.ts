@@ -8,6 +8,8 @@ process.env.DATABASE_URL = `file:../${testDb}`;
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  // JSX automático: testes que renderizam componentes não precisam de React global.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],

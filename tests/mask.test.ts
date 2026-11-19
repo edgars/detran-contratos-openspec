@@ -26,4 +26,10 @@ describe("máscaras de entrada", () => {
     expect(isMaskComplete("20000-000", MASKS.cep)).toBe(true);
     expect(isMaskComplete("20000000", MASKS.cep)).toBe(false);
   });
+
+  it("formata CNPJ (022-pessoas-fornecedores)", () => {
+    expect(MASKS.cnpj).toBe("##.###.###/####-##");
+    expect(applyMask("11222333000181", MASKS.cnpj)).toBe("11.222.333/0001-81");
+    expect(applyMask("112223", MASKS.cnpj)).toBe("11.222.3");
+  });
 });

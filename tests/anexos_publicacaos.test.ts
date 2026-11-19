@@ -62,10 +62,17 @@ describe("015-anexos-publicacaos", () => {
     await loginAs();
     const reg = await prisma.anexoPublicacao.create({ data: { anexo: "atual.pdf", dataPublicacao: new Date(), contratoId } });
     const res = await item.PUT(
-      jsonRequest(`/api/anexos_publicacaos/${reg.id}`, "PUT", { contratoId: String(contratoId), dataPublicacao: "01/02/2026", anexo: "forjado.pdf" }),
+      jsonRequest(`/api/anexos_publicacaos/${reg.id}`, "PUT", { contratoId: String(contratoId), dataPublicacao: "01/02/2026" }),
       idParams(reg.id),
     );
     expect(res.status).toBe(200);
+    // 024-kit-robustez: nome de arquivo enviado como texto é recusado no campo (antes era ignorado).
+    const forjado = await item.PUT(
+      jsonRequest(`/api/anexos_publicacaos/${reg.id}`, "PUT", { contratoId: String(contratoId), dataPublicacao: "01/02/2026", anexo: "forjado.pdf" }),
+      idParams(reg.id),
+    );
+    expect(forjado.status).toBe(400);
+    expect((await forjado.json()).errors.anexo).toBe("Envie o arquivo em PDF");
     const lido = await (await item.GET(jsonRequest(`/api/anexos_publicacaos/${reg.id}`), idParams(reg.id))).json();
     expect(lido.anexo).toBe("atual.pdf");
     expect(lido.dataPublicacao).toBe("2026-02-01T00:00:00.000Z");

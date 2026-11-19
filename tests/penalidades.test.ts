@@ -75,10 +75,17 @@ describe("016-penalidades", () => {
     const outro = await prisma.contrato.create({ data: { objeto: "Outro" } });
     const reg = await prisma.penalidade.create({ data: { arquivo: "atual.pdf", dataRegistro: new Date(), contratoId, userId: outroUserId } });
     const res = await item.PUT(
-      jsonRequest(`/api/penalidades/${reg.id}`, "PUT", { contratoId: String(outro.id), arquivo: "forjado.pdf", userId: 12345 }),
+      jsonRequest(`/api/penalidades/${reg.id}`, "PUT", { contratoId: String(outro.id), userId: 12345 }),
       idParams(reg.id),
     );
     expect(res.status).toBe(200);
+    // 024-kit-robustez: nome de arquivo enviado como texto é recusado no campo (antes era ignorado).
+    const forjado = await item.PUT(
+      jsonRequest(`/api/penalidades/${reg.id}`, "PUT", { contratoId: String(outro.id), arquivo: "forjado.pdf" }),
+      idParams(reg.id),
+    );
+    expect(forjado.status).toBe(400);
+    expect((await forjado.json()).errors.arquivo).toBe("Envie o arquivo em PDF");
     const lido = await (await item.GET(jsonRequest(`/api/penalidades/${reg.id}`), idParams(reg.id))).json();
     expect(lido).toMatchObject({ contratoId: outro.id, arquivo: "atual.pdf", userId: outroUserId });
 

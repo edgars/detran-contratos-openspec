@@ -50,7 +50,7 @@ export const tipoContratoFields = {
 
 export const contratoStatusFields = {
   // RK-f0ce91a53de9 — Descricao is derived before saving (aspas duplas viram simples)
-  descricao: optionalString().transform((v) => (v === undefined ? v : normalizeDescricao(v))),
+  descricao: optionalString().transform((v) => (v === undefined || v === null ? v : normalizeDescricao(v))),
 };
 
 export const userFields = {
