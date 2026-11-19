@@ -28,6 +28,12 @@ export async function cookies() {
   return {
     get: (name: string): Cookie | undefined => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
     set: (name: string, value: string, opts?: Record<string, unknown>) => {
+      // Como no navegador: cookie gravado já expirado (maxAge 0) é apagado.
+      if (opts?.maxAge === 0) {
+        jar.delete(name);
+        options.set(name, opts);
+        return;
+      }
       jar.set(name, value);
       options.set(name, opts ?? {});
     },

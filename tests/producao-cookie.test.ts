@@ -52,5 +52,14 @@ describe("026-producao › Cookie de sessão seguro em produção", () => {
     const header = await loginProducao();
     expect(header).toMatch(/;\s*SameSite=None/i);
     expect(header).toMatch(/;\s*Secure/i);
+    // Sem Partitioned, navegadores que bloqueiam cookie de terceiros descartam a sessão dentro do iframe.
+    expect(header).toMatch(/;\s*Partitioned/i);
+  });
+
+  it("Fora do iframe o cookie não é Partitioned", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("COOKIE_SAMESITE", "");
+    const header = await loginProducao();
+    expect(header).not.toMatch(/Partitioned/i);
   });
 });
